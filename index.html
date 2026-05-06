@@ -222,6 +222,29 @@
             width: 24px; height: 24px; border-radius: 50%; border: 2px solid #10b981;
         }
 
+        /* Login Modal */
+        .login-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(9, 9, 11, 0.95);
+            backdrop-filter: blur(8px); z-index: 10000; display: none; opacity: 0; transition: opacity 0.3s ease;
+            align-items: center; justify-content: center;
+        }
+        .login-modal.active { display: flex; opacity: 1; }
+        
+        .login-card {
+            background: rgba(24, 24, 27, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(63, 63, 70, 0.4);
+            border-radius: 1rem; padding: 3rem; max-width: 400px; width: 90%; box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.5);
+        }
+
+        .sync-indicator {
+            position: fixed; top: 1rem; right: 1rem; background: rgba(16, 185, 129, 0.9); color: white;
+            padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;
+            display: none; align-items: center; gap: 0.5rem; z-index: 9998; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .sync-indicator.show { display: flex; }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+
         @media (max-width: 1024px) {
             .expense-bento-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
             .expense-card-large, .expense-card-tall, .expense-card-wide { grid-column: span 1; grid-row: span 1; }
@@ -232,6 +255,37 @@
 </head>
 
 <body class="antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-white bg-zinc-950 text-zinc-50">
+
+    <!-- SYNC INDICATOR -->
+    <div id="sync-indicator" class="sync-indicator">
+        <iconify-icon icon="solar:refresh-linear" class="animate-spin"></iconify-icon>
+        <span>Syncing data...</span>
+    </div>
+
+    <!-- LOGIN MODAL -->
+    <div id="login-modal" class="login-modal">
+        <div class="login-card">
+            <div class="text-center mb-8">
+                <div class="w-12 h-12 flex items-center justify-center rounded-lg bg-emerald-600 text-white font-mono text-xl mx-auto mb-4">FF</div>
+                <h2 class="text-2xl font-normal text-white mb-2">Welcome to FinanceFlow</h2>
+                <p class="text-sm text-zinc-400">Sign in to sync your data across devices</p>
+            </div>
+            
+            <button id="google-login-btn" class="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-3">
+                <svg width="18" height="18" viewBox="0 0 18 18">
+                    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+                    <path fill="#34A853" d="M9.003 18c2.43 0 4.467-.806 5.956-2.18L12.05 13.56c-.806.54-1.836.86-3.047.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9.003 18z"/>
+                    <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71 0-.593.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+                    <path fill="#EA4335" d="M9.003 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.464.891 11.428 0 9.003 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29c.708-2.127 2.692-3.71 5.036-3.71z"/>
+                </svg>
+                Continue with Google
+            </button>
+            
+            <button id="close-login-modal" class="w-full mt-4 text-zinc-400 hover:text-white text-sm transition-colors">
+                Continue without signing in
+            </button>
+        </div>
+    </div>
 
     <!-- HERO SECTION -->
     <section class="relative w-full h-screen flex flex-col justify-between p-6 md:p-12 overflow-hidden border-b border-zinc-900">
@@ -824,7 +878,7 @@
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, orderBy, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-        // 2. YOUR Firebase configuration
+        // 2. Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBMkd3pdv_KwzDMMuRSPG6scVb52txbIwA",
             authDomain: "financeflow-4a92a.firebaseapp.com",
@@ -843,8 +897,17 @@
         let currentUser = null;
         window.currentUser = currentUser;
 
-        // 5. Listen for auth state changes
-        onAuthStateChanged(auth, (user) => {
+        // 5. Sync indicator helpers
+        function showSyncIndicator() {
+            document.getElementById('sync-indicator').classList.add('show');
+        }
+
+        function hideSyncIndicator() {
+            document.getElementById('sync-indicator').classList.remove('show');
+        }
+
+        // 6. Listen for auth state changes
+        onAuthStateChanged(auth, async (user) => {
             currentUser = user;
             window.currentUser = user;
             
@@ -857,43 +920,150 @@
                 document.getElementById('user-avatar').src = user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.email);
                 document.getElementById('user-email').textContent = user.email.split('@')[0];
                 
-                loadUserData();
+                // Load user's data from Firebase
+                await loadUserDataFromFirebase();
             } else {
                 console.log('❌ Not logged in');
                 document.getElementById('open-login-btn').textContent = 'Log In';
                 document.getElementById('user-badge').classList.add('hidden');
+                
+                // Clear user-specific data
+                clearUserData();
             }
         });
 
-        // 6. LOGIN/LOGOUT
+        // 7. LOGIN/LOGOUT handlers
         document.getElementById('open-login-btn').addEventListener('click', async () => {
             if (currentUser) {
                 // Log out
                 if (confirm('Are you sure you want to log out?')) {
                     await signOut(auth);
-                    localStorage.clear();
                     location.reload();
                 }
             } else {
-                // Log in with Google
-                const provider = new GoogleAuthProvider();
-                try {
-                    const result = await signInWithPopup(auth, provider);
-                    console.log('✅ Logged in:', result.user.email);
-                } catch (error) {
-                    console.error('Login error:', error);
-                    alert('Login failed: ' + error.message);
-                }
+                // Show login modal
+                document.getElementById('login-modal').classList.add('active');
             }
         });
 
-        // 7. SAVE EXPENSE TO FIRESTORE
+        // Close login modal
+        document.getElementById('close-login-modal').addEventListener('click', () => {
+            document.getElementById('login-modal').classList.remove('active');
+        });
+
+        // Google login button
+        document.getElementById('google-login-btn').addEventListener('click', async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                const result = await signInWithPopup(auth, provider);
+                console.log('✅ Logged in:', result.user.email);
+                document.getElementById('login-modal').classList.remove('active');
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Login failed: ' + error.message);
+            }
+        });
+
+        // 8. Load ALL user data from Firebase
+        async function loadUserDataFromFirebase() {
+            if (!currentUser) return;
+
+            console.log('🔄 Loading data from Firebase for:', currentUser.email);
+            showSyncIndicator();
+
+            try {
+                // 1. Load expenses
+                const expensesQuery = query(
+                    collection(db, 'expenses'),
+                    where('userId', '==', currentUser.uid),
+                    orderBy('createdAt', 'desc')
+                );
+                const expensesSnapshot = await getDocs(expensesQuery);
+                const expenses = expensesSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    date: doc.data().date || new Date().toISOString().split('T')[0]
+                }));
+                
+                // Save to user-specific localStorage
+                localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expenses));
+                console.log(`✅ Loaded ${expenses.length} expenses from Firebase`);
+
+                // 2. Load budget settings
+                const userDocRef = doc(db, 'users', currentUser.uid);
+                const userDoc = await getDoc(userDocRef);
+                
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    
+                    if (userData.budget) {
+                        // Apply budget settings to UI
+                        document.getElementById('input-needs').value = userData.budget.needs || 50;
+                        document.getElementById('input-wants').value = userData.budget.wants || 30;
+                        document.getElementById('input-savings').value = userData.budget.savings || 20;
+                        document.getElementById('income-input').dataset.value = userData.budget.income || 5200;
+                        
+                        // Save to user-specific localStorage
+                        localStorage.setItem(`income_${currentUser.uid}`, userData.budget.income || 5200);
+                        localStorage.setItem(`budgetNeeds_${currentUser.uid}`, userData.budget.needs || 50);
+                        localStorage.setItem(`budgetWants_${currentUser.uid}`, userData.budget.wants || 30);
+                        localStorage.setItem(`budgetSavings_${currentUser.uid}`, userData.budget.savings || 20);
+                        
+                        console.log('✅ Budget settings loaded from Firebase');
+                    }
+
+                    // Load currency preference
+                    if (userData.currency) {
+                        window.currentCurrency = userData.currency;
+                        localStorage.setItem('currency', userData.currency);
+                        document.getElementById('current-currency-label').innerHTML = `${userData.currency} <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[10px]"></iconify-icon>`;
+                    }
+                }
+
+                // 3. Update UI
+                if (typeof window.updateBudgetAllocation === 'function') {
+                    window.updateBudgetAllocation();
+                }
+
+                // 4. Refresh expense modal if open
+                if (document.getElementById('expense-modal').classList.contains('active')) {
+                    if (typeof window.updateExpenseModal === 'function') {
+                        await window.updateExpenseModal();
+                    }
+                }
+
+                console.log('✅ All data loaded successfully');
+            } catch (error) {
+                console.error('❌ Error loading user data:', error);
+                alert('Failed to load your data. Please refresh the page.');
+            } finally {
+                hideSyncIndicator();
+            }
+        }
+
+        // 9. Clear user-specific data on logout
+        function clearUserData() {
+            // Remove all user-specific localStorage keys
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('_')) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            console.log('🧹 Cleared user-specific data');
+        }
+
+        // 10. SAVE EXPENSE TO FIRESTORE
         window.saveExpenseToFirebase = async function(expense) {
             if (!currentUser) {
                 alert('⚠️ Please log in with Google to save expenses to the cloud!');
                 return false;
             }
 
+            showSyncIndicator();
             try {
                 const docRef = await addDoc(collection(db, 'expenses'), {
                     userId: currentUser.uid,
@@ -904,23 +1074,42 @@
                     currency: window.currentCurrency,
                     createdAt: new Date()
                 });
+                
                 console.log('✅ Expense saved to Firebase with ID:', docRef.id);
+                
+                // Also save to user-specific localStorage
+                const expenses = JSON.parse(localStorage.getItem(`expenses_${currentUser.uid}`) || '[]');
+                expenses.unshift({ id: docRef.id, ...expense, userId: currentUser.uid, currency: window.currentCurrency, createdAt: new Date() });
+                localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expenses));
+                
                 return true;
             } catch (error) {
                 console.error('❌ Error saving expense:', error);
                 alert('Failed to save expense: ' + error.message);
                 return false;
+            } finally {
+                hideSyncIndicator();
             }
         };
 
-        // 8. GET EXPENSES FROM FIRESTORE
+        // 11. GET EXPENSES FROM FIRESTORE
         window.getExpensesFromFirebase = async function() {
             if (!currentUser) {
-                console.log('Not logged in, using localStorage');
-                return JSON.parse(localStorage.getItem('expenses') || '[]');
+                console.log('Not logged in, returning empty array');
+                return [];
             }
 
             try {
+                // First try localStorage (faster)
+                const cachedExpenses = localStorage.getItem(`expenses_${currentUser.uid}`);
+                if (cachedExpenses) {
+                    const expenses = JSON.parse(cachedExpenses);
+                    console.log(`✅ Loaded ${expenses.length} expenses from localStorage cache`);
+                    return expenses;
+                }
+
+                // If no cache, fetch from Firebase
+                showSyncIndicator();
                 const q = query(
                     collection(db, 'expenses'),
                     where('userId', '==', currentUser.uid),
@@ -935,44 +1124,65 @@
                 
                 console.log(`✅ Loaded ${expenses.length} expenses from Firebase`);
                 
-                // Save to localStorage as backup
-                localStorage.setItem('expenses', JSON.stringify(expenses));
+                // Save to localStorage cache
+                localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expenses));
                 return expenses;
             } catch (error) {
                 console.error('❌ Error loading expenses:', error);
-                // Fallback to localStorage
-                return JSON.parse(localStorage.getItem('expenses') || '[]');
+                return [];
+            } finally {
+                hideSyncIndicator();
             }
         };
 
-        // 9. UPDATE EXPENSE
+        // 12. UPDATE EXPENSE
         window.updateExpenseInFirebase = async function(id, updates) {
             if (!currentUser) return;
 
+            showSyncIndicator();
             try {
                 await updateDoc(doc(db, 'expenses', id), {
                     ...updates,
                     updatedAt: new Date()
                 });
+                
                 console.log('✅ Expense updated in Firebase');
+                
+                // Update localStorage cache
+                const expenses = JSON.parse(localStorage.getItem(`expenses_${currentUser.uid}`) || '[]');
+                const index = expenses.findIndex(exp => exp.id === id);
+                if (index !== -1) {
+                    expenses[index] = { ...expenses[index], ...updates };
+                    localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expenses));
+                }
             } catch (error) {
                 console.error('❌ Error updating expense:', error);
+            } finally {
+                hideSyncIndicator();
             }
         };
 
-        // 10. DELETE EXPENSE
+        // 13. DELETE EXPENSE
         window.deleteExpenseFromFirebase = async function(id) {
             if (!currentUser) return;
 
+            showSyncIndicator();
             try {
                 await deleteDoc(doc(db, 'expenses', id));
                 console.log('✅ Expense deleted from Firebase');
+                
+                // Remove from localStorage cache
+                const expenses = JSON.parse(localStorage.getItem(`expenses_${currentUser.uid}`) || '[]');
+                const filtered = expenses.filter(exp => exp.id !== id);
+                localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(filtered));
             } catch (error) {
                 console.error('❌ Error deleting expense:', error);
+            } finally {
+                hideSyncIndicator();
             }
         };
 
-        // 11. SAVE BUDGET SETTINGS
+        // 14. SAVE BUDGET SETTINGS
         window.saveBudgetToFirebase = async function(budget) {
             if (!currentUser) return;
 
@@ -980,52 +1190,21 @@
                 const userDocRef = doc(db, 'users', currentUser.uid);
                 await setDoc(userDocRef, { 
                     budget,
+                    currency: window.currentCurrency,
                     updatedAt: new Date()
                 }, { merge: true });
+                
                 console.log('✅ Budget saved to Firebase');
+                
+                // Also save to user-specific localStorage
+                localStorage.setItem(`income_${currentUser.uid}`, budget.income);
+                localStorage.setItem(`budgetNeeds_${currentUser.uid}`, budget.needs);
+                localStorage.setItem(`budgetWants_${currentUser.uid}`, budget.wants);
+                localStorage.setItem(`budgetSavings_${currentUser.uid}`, budget.savings);
             } catch (error) {
                 console.error('❌ Error saving budget:', error);
             }
         };
-
-        // 12. LOAD USER DATA
-        async function loadUserData() {
-            if (!currentUser) return;
-
-            console.log('🔄 Loading user data from Firebase...');
-
-            // Load expenses from Firebase
-            const expenses = await getExpensesFromFirebase();
-
-            // Load budget settings
-            try {
-                const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    if (data.budget) {
-                        document.getElementById('input-needs').value = data.budget.needs || 50;
-                        document.getElementById('input-wants').value = data.budget.wants || 30;
-                        document.getElementById('input-savings').value = data.budget.savings || 20;
-                        document.getElementById('income-input').dataset.value = data.budget.income || 5200;
-                        
-                        // Trigger UI update
-                        if (typeof window.updateBudgetAllocation === 'function') {
-                            window.updateBudgetAllocation();
-                        }
-                        console.log('✅ Budget settings loaded from Firebase');
-                    }
-                }
-            } catch (error) {
-                console.log('No saved budget settings or error:', error);
-            }
-
-            // Refresh expense modal if open
-            if (document.getElementById('expense-modal').classList.contains('active')) {
-                if (typeof window.updateExpenseModal === 'function') {
-                    await window.updateExpenseModal();
-                }
-            }
-        }
 
         console.log('🔥 Firebase initialized and ready!');
     </script>
@@ -1077,15 +1256,19 @@
             if (oldCur === newCur) return;
             const multiplier = (oldCur === 'USD' && newCur === 'VND') ? EXCHANGE_RATE : (1 / EXCHANGE_RATE);
             
-            const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-            expenses.forEach(exp => exp.amount *= multiplier);
-            localStorage.setItem('expenses', JSON.stringify(expenses));
+            if (window.currentUser) {
+                const expenses = JSON.parse(localStorage.getItem(`expenses_${window.currentUser.uid}`) || '[]');
+                expenses.forEach(exp => exp.amount *= multiplier);
+                localStorage.setItem(`expenses_${window.currentUser.uid}`, JSON.stringify(expenses));
+                
+                const income = parseFloat(localStorage.getItem(`income_${window.currentUser.uid}`)) || 5200;
+                localStorage.setItem(`income_${window.currentUser.uid}`, income * multiplier);
+            }
             
             const incomeInput = document.getElementById('income-input');
             let income = parseFloat(incomeInput.dataset.value) || 0;
             income *= multiplier;
             incomeInput.dataset.value = income;
-            localStorage.setItem('income', income);
             incomeInput.value = formatNumber(income);
         }
 
@@ -1139,6 +1322,13 @@
                 return lastDay.getDate() - now.getDate() + 1;
             }
             return lastDay.getDate();
+        }
+
+        function getUserIncome() {
+            if (window.currentUser) {
+                return parseFloat(localStorage.getItem(`income_${window.currentUser.uid}`)) || 5200;
+            }
+            return parseFloat(localStorage.getItem('income')) || 5200;
         }
 
         // ==================== BUDGET ALLOCATION UPDATES ====================
@@ -1210,7 +1400,7 @@
         
         async function updateExpenseModal() {
             const expenses = await window.getExpensesFromFirebase();
-            const income = parseFloat(localStorage.getItem('income')) || parseFloat(document.getElementById('income-input').dataset.value) || 0;
+            const income = getUserIncome();
             
             // Filter by selected month
             const filtered = expenses.filter(exp => {
@@ -1416,21 +1606,26 @@
                 const categoryInput = expenseRow.querySelector('.expense-category-editable');
                 const amountInput = expenseRow.querySelector('.expense-amount-editable');
                 
+                const name = nameInput.value.trim();
+                const amount = parseFloat(amountInput.value);
+                
+                if (!name) {
+                    alert('Name cannot be empty');
+                    return;
+                }
+                if (amount <= 0 || isNaN(amount)) {
+                    alert('Amount must be a positive number');
+                    return;
+                }
+                
                 const updates = {
-                    name: nameInput.value,
+                    name: name,
                     category: categoryInput.value,
-                    amount: parseFloat(amountInput.value) || 0
+                    amount: amount
                 };
                 
                 // Update in Firebase
                 await window.updateExpenseInFirebase(id, updates);
-                
-                // Update in localStorage
-                const expenseIndex = expenses.findIndex(exp => exp.id === id);
-                if (expenseIndex !== -1) {
-                    expenses[expenseIndex] = { ...expenses[expenseIndex], ...updates };
-                    localStorage.setItem('expenses', JSON.stringify(expenses));
-                }
                 
                 updateExpenseModal();
             } else {
@@ -1452,11 +1647,6 @@
             
             // Delete from Firebase
             await window.deleteExpenseFromFirebase(id);
-            
-            // Delete from localStorage
-            const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-            const filtered = expenses.filter(exp => exp.id !== id);
-            localStorage.setItem('expenses', JSON.stringify(filtered));
             
             updateExpenseModal();
         }
@@ -1500,7 +1690,10 @@
 
         // ==================== INCOME INPUT ====================
         const incomeInput = document.getElementById('income-input');
-        let rawIncome = parseFloat(localStorage.getItem('income')) || (currentCurrency === 'VND' ? 5200 * EXCHANGE_RATE : 5200);
+        let rawIncome = getUserIncome();
+        if (currentCurrency === 'VND' && rawIncome < 1000000) {
+            rawIncome *= EXCHANGE_RATE;
+        }
         incomeInput.dataset.value = rawIncome;
         incomeInput.value = formatNumber(rawIncome);
 
@@ -1521,7 +1714,14 @@
             let typed = parseFloat(this.value) || 0;
             if (currentCurrency === 'VND') typed = typed * 1000;
             this.dataset.value = typed;
-            localStorage.setItem('income', typed);
+            
+            // Save to user-specific localStorage
+            if (window.currentUser) {
+                localStorage.setItem(`income_${window.currentUser.uid}`, typed);
+            } else {
+                localStorage.setItem('income', typed);
+            }
+            
             this.value = formatNumber(typed);
             updateBudgetAllocation();
             
@@ -1580,11 +1780,6 @@
             const saved = await window.saveExpenseToFirebase(formData);
             
             if (saved) {
-                // Also save to localStorage as backup
-                const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
-                expenses.push({ id: Date.now(), ...formData });
-                localStorage.setItem('expenses', JSON.stringify(expenses));
-                
                 if (document.getElementById('expense-modal').classList.contains('active')) {
                     await updateExpenseModal();
                 }
