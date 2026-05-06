@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinanceFlow | Personal Financial Management</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #09090b;
+            color: #fafafa;
+        }
+        
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .text-balance { text-wrap: balance; }
+        ::selection { background: rgba(16, 185, 129, 0.3); color: #fff; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; pointer-events: auto; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px; background: #10b981;
+            border: 2px solid #09090b; border-radius: 50%; cursor: pointer; margin-top: -5px;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); box-shadow: 0 0 15px rgba(16, 185, 129, 0.8); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 2px; cursor: pointer; background: #27272a; }
+        input[type=range]:focus { outline: none; }
+
+        .tech-glass {
+            background: rgba(24, 24, 27, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(63, 63, 70, 0.4); box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.5); pointer-events: auto;
+        }
+
+        .grid-overlay {
+            background-size: 32px 32px;
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+            -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 80%);
+        }
+
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 1.2s ease-out forwards; }
+        @keyframes flow { 0% { stroke-dashoffset: 20; } 100% { stroke-dashoffset: 0; } }
+        .animate-flow { animation: flow 1s linear infinite; }
+
+        .emerald-glow { box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.4); }
+
+        .editable-value {
+            background: transparent; border: 1px solid transparent; color: #10b981; font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem; text-align: right; outline: none; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;
+            cursor: pointer; min-width: 60px; pointer-events: auto; z-index: 100; position: relative;
+        }
+        .editable-value:hover { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+        .editable-value:focus { background: rgba(16, 185, 129, 0.15); border-color: #10b981; cursor: text; }
+
+        .percentage-input {
+            background: transparent; border: 1px solid transparent; color: #d4d4d8; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem; text-align: right; outline: none; padding: 2px 6px; border-radius: 4px; transition: all 0.2s;
+            cursor: pointer; width: 50px; text-transform: uppercase; letter-spacing: 0.1em; pointer-events: auto;
+            z-index: 100; position: relative;
+        }
+        .percentage-input:hover { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); }
+        .percentage-input:focus { background: rgba(255, 255, 255, 0.1); border-color: #10b981; cursor: text; }
+
+        .allocation-amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #71717a;
+            text-align: right;
+            min-width: 80px;
+        }
+
+        .form-input, .form-select {
+            background: rgba(24, 24, 27, 0.8); border: 1px solid rgba(63, 63, 70, 0.6); color: #fafafa;
+            font-family: 'Inter', sans-serif; font-size: 0.875rem; padding: 8px 12px; border-radius: 6px;
+            outline: none; transition: all 0.2s; width: 100%; pointer-events: auto;
+        }
+        .form-input:hover, .form-select:hover { border-color: rgba(16, 185, 129, 0.4); }
+        .form-input:focus, .form-select:focus { border-color: #10b981; background: rgba(24, 24, 27, 0.95); }
+
+        .expense-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(9, 9, 11, 0.95);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 9999; display: none;
+            opacity: 0; transition: opacity 0.3s ease; overflow-y: auto; pointer-events: auto;
+        }
+        .expense-modal.active { display: block; opacity: 1; }
+
+        .expense-bento-container { max-width: 1400px; margin: auto; padding: 2rem; width: 100%; }
+        .expense-bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; grid-auto-rows: minmax(200px, auto); }
+        
+        .expense-card {
+            background: rgba(24, 24, 27, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(63, 63, 70, 0.4); border-radius: 1rem; padding: 1.5rem; transition: all 0.3s ease;
+        }
+        .expense-card:hover { border-color: rgba(16, 185, 129, 0.4); box-shadow: 0 20px 40px -4px rgba(0, 0, 0, 0.5); }
+
+        .expense-card-large { grid-column: span 2; grid-row: span 2; }
+        .expense-card-tall { grid-column: span 1; grid-row: span 3; }
+        .expense-card-wide { grid-column: span 2; grid-row: span 1; }
+
+        .expense-history { max-height: 320px; overflow-y: auto; overflow-x: hidden; }
+        .expense-history::-webkit-scrollbar { width: 6px; }
+        .expense-history::-webkit-scrollbar-track { background: rgba(39, 39, 42, 0.3); border-radius: 3px; }
+        .expense-history::-webkit-scrollbar-thumb { background: rgba(113, 113, 122, 0.5); border-radius: 3px; }
+        .expense-history::-webkit-scrollbar-thumb:hover { background: rgba(113, 113, 122, 0.7); }
+
+        .expense-history-item {
+            display: flex; justify-content: space-between; align-items: center; padding: 0.75rem;
+            border-bottom: 1px solid rgba(63, 63, 70, 0.3); transition: background 0.2s; position: relative;
+        }
+        .expense-history-item:hover { background: rgba(16, 185, 129, 0.05); }
+        .expense-history-item:hover .action-buttons { opacity: 1 !important; }
+        .expense-history-item:last-child { border-bottom: none; }
+        .expense-history-item.editing { background: rgba(16, 185, 129, 0.05); }
+
+        .action-buttons { display: flex; gap: 0.25rem; opacity: 0.4; transition: opacity 0.2s; }
+
+        .expense-name-editable, .expense-category-editable, .expense-amount-editable {
+            background: transparent; border: 1px solid transparent; outline: none; transition: all 0.2s; border-radius: 4px; padding: 2px 6px;
+        }
+        .expense-name-editable { color: #fafafa; font-size: 0.875rem; width: 100%; font-family: 'Inter', sans-serif; }
+        .expense-category-editable { color: #71717a; font-size: 0.75rem; cursor: pointer; font-family: 'Inter', sans-serif; }
+        .expense-amount-editable { color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; text-align: right; width: 120px; }
+
+        .expense-name-editable:hover, .expense-category-editable:hover, .expense-amount-editable:hover { background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2); }
+        .expense-name-editable:focus, .expense-category-editable:focus, .expense-amount-editable:focus { background: rgba(16, 185, 129, 0.1); border-color: #10b981; }
+
+        .stat-number { font-size: 3rem; font-weight: 300; color: #10b981; font-family: 'JetBrains Mono', monospace; }
+        .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #71717a; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.5rem; }
+
+        .search-filter-container { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .search-wrapper { position: relative; flex: 1; min-width: 200px; }
+        .search-input { width: 100%; background: rgba(24, 24, 27, 0.8); border: 1px solid rgba(63, 63, 70, 0.6); color: #fafafa; font-family: 'Inter', sans-serif; font-size: 0.875rem; padding: 8px 12px 8px 36px; border-radius: 6px; outline: none; transition: all 0.2s; pointer-events: auto; }
+        .search-input:hover { border-color: rgba(16, 185, 129, 0.4); }
+        .search-input:focus { border-color: #10b981; background: rgba(24, 24, 27, 0.95); }
+        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #71717a; pointer-events: none; }
+
+        .category-filter-select {
+            background: rgba(24, 24, 27, 0.8); border: 1px solid rgba(63, 63, 70, 0.6); color: #d4d4d8; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; min-width: 150px; pointer-events: auto;
+        }
+        .category-filter-select:hover { border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); }
+        .category-filter-select:focus { outline: none; border-color: #10b981; }
+
+        .month-picker-container {
+            background: rgba(24, 24, 27, 0.8); border: 1px solid rgba(63, 63, 70, 0.6); border-radius: 8px; padding: 6px 12px;
+            display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+        }
+        .month-picker-container:hover { border-color: rgba(16, 185, 129, 0.4); }
+        .month-picker-container:focus-within { border-color: #10b981; box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2); }
+        
+        .month-picker {
+            background: transparent; color: #fafafa; border: none; outline: none; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem; cursor: pointer; color-scheme: dark; 
+        }
+        .month-picker::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+        .month-picker::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+
+        .comparison-bar { display: flex; gap: 1rem; margin-top: 1rem; }
+        .bar-item { flex: 1; }
+        .bar-fill { height: 8px; background: #27272a; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+        .bar-fill-inner { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+
+        .donut-chart-container { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; gap: 3rem; }
+        .donut-chart { position: relative; width: 360px; height: 360px; flex-shrink: 0; }
+        .donut-segment { transition: all 0.3s; cursor: pointer; }
+        .donut-segment:hover { opacity: 0.8; filter: brightness(1.3); }
+
+        .category-legend { display: flex; flex-direction: column; gap: 1rem; flex: 1; max-width: 400px; }
+        .legend-item { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem; padding: 0.75rem; border-radius: 0.5rem; transition: all 0.2s; cursor: pointer; border: 1px solid transparent; background: rgba(24, 24, 27, 0.4); }
+        .legend-item:hover { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); transform: translateX(4px); }
+        .legend-item-header { display: flex; align-items: center; gap: 0.75rem; }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+        .legend-text { color: #d4d4d8; flex: 1; font-size: 0.8rem; text-transform: capitalize; font-weight: 500; }
+        .legend-percentage { color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; font-weight: 600; min-width: 55px; text-align: right; }
+        .legend-amount { color: #71717a; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; min-width: 80px; text-align: right; }
+
+        .budget-progress { margin-top: 0.5rem; }
+        .budget-progress-bar { position: relative; height: 6px; background: #27272a; border-radius: 3px; overflow: visible; }
+        .budget-progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease, background-color 0.3s ease; }
+        .budget-progress-fill.under-budget { background: #10b981; }
+        .budget-progress-fill.at-budget { background: #f59e0b; }
+        .budget-progress-fill.over-budget { background: #ef4444; }
+        .budget-limit-marker { position: absolute; top: -2px; height: 10px; width: 2px; background: #71717a; transition: left 0.5s ease; }
+        .budget-info { display: flex; justify-content: space-between; margin-top: 0.25rem; font-size: 0.65rem; }
+        .budget-spent, .budget-limit { color: #a1a1aa; font-family: 'JetBrains Mono', monospace; }
+
+        .donut-center-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+        .donut-center-title { font-size: 0.65rem; color: #71717a; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem; }
+        .donut-center-value { font-size: 1.75rem; color: #fafafa; font-family: 'JetBrains Mono', monospace; font-weight: 300; }
+        .donut-center-subtitle { font-size: 0.6rem; color: #52525b; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+
+        .close-modal {
+            position: fixed; top: 2rem; right: 2rem; width: 40px; height: 40px; background: rgba(24, 24, 27, 0.8);
+            border: 1px solid rgba(63, 63, 70, 0.6); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; z-index: 10000;
+        }
+        .close-modal:hover { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; }
+
+        .daily-allowance-card { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; padding: 0.75rem; margin-top: 0.75rem; }
+        .daily-allowance-label { font-size: 0.65rem; color: #71717a; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.25rem; }
+        .daily-allowance-amount { font-size: 1.5rem; color: #10b981; font-family: 'JetBrains Mono', monospace; font-weight: 300; }
+        .daily-allowance-days { font-size: 0.7rem; color: #a1a1aa; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem; }
+
+        .user-badge {
+            display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; font-size: 0.75rem;
+        }
+        .user-avatar {
+            width: 24px; height: 24px; border-radius: 50%; border: 2px solid #10b981;
+        }
+
+        @media (max-width: 1024px) {
+            .expense-bento-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
+            .expense-card-large, .expense-card-tall, .expense-card-wide { grid-column: span 1; grid-row: span 1; }
+            .donut-chart-container { flex-direction: column; gap: 2rem; }
+            .category-legend { max-width: 100%; width: 100%; }
+        }
+    </style>
+</head>
+
+<body class="antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-white bg-zinc-950 text-zinc-50">
+
+    <!-- HERO SECTION -->
+    <section class="relative w-full h-screen flex flex-col justify-between p-6 md:p-12 overflow-hidden border-b border-zinc-900">
+        <div class="absolute inset-0 pointer-events-none grid-overlay z-0"></div>
+        <div id="canvas-container" class="absolute inset-0 z-[1] pointer-events-none"></div>
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 blur-[120px] rounded-full z-0 pointer-events-none"></div>
+
+        <header class="relative z-20 flex justify-end items-start animate-fade-in pointer-events-auto" style="animation-delay: 0.1s;">
+            <nav class="hidden md:flex items-center gap-8">
+                <a href="#" class="font-mono text-xs text-zinc-400 hover:text-white transition-colors uppercase tracking-widest">Features</a>
+                
+                <!-- CURRENCY DROPDOWN -->
+                <div class="relative group pointer-events-auto z-50">
+                    <button id="current-currency-label" class="font-mono text-xs text-zinc-400 hover:text-white transition-colors uppercase tracking-widest flex items-center gap-1">
+                        USD <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[10px]"></iconify-icon>
+                    </button>
+                    <div class="absolute top-full right-0 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                        <div class="w-32 tech-glass rounded-lg py-2 border border-zinc-800">
+                            <button class="w-full text-left px-4 py-2 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors currency-selector flex justify-between items-center" data-currency="USD">
+                                USD <span>$</span>
+                            </button>
+                            <button class="w-full text-left px-4 py-2 text-xs font-mono text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-colors currency-selector flex justify-between items-center" data-currency="VND">
+                                VND <span>₫</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- USER BADGE (shows when logged in) -->
+                <div id="user-badge" class="user-badge hidden">
+                    <img id="user-avatar" class="user-avatar" src="" alt="User">
+                    <span id="user-email" class="text-emerald-400 font-mono"></span>
+                </div>
+
+                <button id="open-login-btn" class="text-sm px-5 py-2 bg-white text-zinc-950 font-normal hover:bg-zinc-200 transition-colors rounded-full flex items-center gap-2">
+                    Log In
+                </button>
+            </nav>
+        </header>
+
+        <div class="relative z-20 w-full max-w-4xl mt-auto md:mt-0 md:top-[-10%] animate-fade-in opacity-0" style="animation-delay: 0.3s;">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="h-px w-8 bg-emerald-500"></div>
+                <span class="font-mono text-xs text-emerald-500 uppercase tracking-[0.2em]">Personal Finance</span>
+            </div>
+            <h1 class="text-6xl md:text-8xl lg:text-9xl text-white leading-[0.9] tracking-tight font-normal text-balance">
+                Personal<br><span class="text-zinc-500">Budget.</span>
+            </h1>
+            <p class="mt-8 max-w-md text-base md:text-lg text-zinc-400 font-light leading-relaxed">
+                Smart budgeting tools and expense tracking to help you save more, spend wisely, and reach your financial goals faster.
+            </p>
+            <div class="mt-10 flex items-center gap-6 pointer-events-auto">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] animate-pulse"></div>
+                    <span class="font-mono text-xs text-zinc-500 tracking-widest uppercase">Cloud Synced</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget Control Panel -->
+        <div class="absolute bottom-8 right-6 md:right-12 hidden lg:flex items-center animate-fade-in opacity-0" style="animation-delay: 0.5s; z-index: 50;">
+            <div class="w-56 tech-glass rounded-lg p-4 relative z-10 flex flex-col gap-3 mr-[-4px]">
+                <div class="flex items-center gap-2 mb-1">
+                    <iconify-icon icon="solar:wallet-linear" style="stroke-width: 1.5;" class="text-zinc-400"></iconify-icon>
+                    <span class="text-xs font-mono text-zinc-300 uppercase tracking-widest" id="current-month">Monthly</span>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs font-mono text-zinc-500 items-center">
+                        <span>Income</span>
+                        <input type="text" id="income-input" class="editable-value" data-value="5200" value="5,200">
+                    </div>
+                </div>
+                <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-zinc-950 border border-zinc-700 rounded-full z-20"></div>
+            </div>
+
+            <svg class="w-12 h-2 overflow-visible relative z-0 pointer-events-none">
+                <path d="M0,4 C24,4 24,4 48,4" stroke="#10b981" stroke-width="1.5" fill="none" stroke-dasharray="3 3" class="animate-flow"></path>
+            </svg>
+
+            <div class="w-[320px] tech-glass rounded-lg ml-[-4px] relative z-10">
+                <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-zinc-950 border border-zinc-700 rounded-full z-20"></div>
+                <div class="border-b border-zinc-800/60 px-4 py-3 flex justify-between items-center">
+                    <span class="font-mono text-xs text-white uppercase tracking-widest">Budget Allocation</span>
+                    <iconify-icon icon="solar:settings-linear" style="stroke-width: 1.5;" class="text-zinc-500"></iconify-icon>
+                </div>
+                
+                <div class="p-5 space-y-6">
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
+                            <span>Needs</span>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="val-needs" class="percentage-input" value="50%" data-slider="input-needs">
+                                <div class="allocation-amount" id="amount-needs">$2,600</div>
+                            </div>
+                        </div>
+                        <input type="range" id="input-needs" min="0" max="100" step="5" value="50">
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
+                            <span>Wants</span>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="val-wants" class="percentage-input" value="30%" data-slider="input-wants">
+                                <div class="allocation-amount" id="amount-wants">$1,560</div>
+                            </div>
+                        </div>
+                        <input type="range" id="input-wants" min="0" max="100" step="5" value="30">
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
+                            <span>Savings</span>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="val-savings" class="percentage-input" value="20%" data-slider="input-savings">
+                                <div class="allocation-amount" id="amount-savings">$1,040</div>
+                            </div>
+                        </div>
+                        <input type="range" id="input-savings" min="0" max="100" step="5" value="20">
+                    </div>
+
+                    <div class="pt-4 border-t border-zinc-800/60">
+                        <div class="flex justify-between text-xs font-mono tracking-widest">
+                            <span class="text-zinc-500 uppercase">Total</span>
+                            <span id="total-percentage" class="text-white">100%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-6 left-6 md:left-12 w-full max-w-2xl tech-glass rounded-lg p-4 pointer-events-auto animate-fade-in opacity-0" style="animation-delay: 0.5s; z-index: 50;">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <iconify-icon icon="solar:calendar-add-linear" style="stroke-width: 1.5;" class="text-emerald-500 text-lg"></iconify-icon>
+                    <h3 class="font-mono text-xs text-white uppercase tracking-widest">Daily Expense</h3>
+                    <span class="text-[10px] text-zinc-600 font-mono ml-2 hidden md:inline border border-zinc-700 rounded px-1.5 py-0.5">Alt+E</span>
+                </div>
+                <button type="submit" form="expense-form" class="bg-emerald-600 hover:bg-emerald-500 text-white font-normal text-xs px-4 py-2 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap">
+                    <iconify-icon icon="solar:diskette-linear" style="stroke-width: 1.5;" class="text-sm"></iconify-icon> Save
+                </button>
+            </div>
+            
+            <form id="expense-form" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                    <label for="expense-date" class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Date</label>
+                    <input type="date" id="expense-date" class="form-input text-xs py-2 w-full" required>
+                </div>
+                <div>
+                    <label for="expense-name" class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Expense</label>
+                    <input type="text" id="expense-name" class="form-input text-xs py-2 w-full" placeholder="Grocery shopping" required>
+                </div>
+                <div>
+                    <label for="expense-category" class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Category</label>
+                    <select id="expense-category" class="form-select text-xs py-2 w-full" required>
+                        <option value="">Select</option>
+                        <option value="housing">Housing</option>
+                        <option value="food">Food & Dining</option>
+                        <option value="transportation">Transportation</option>
+                        <option value="entertainment">Entertainment</option>
+                        <option value="healthcare">Healthcare</option>
+                        <option value="shopping">Shopping</option>
+                        <option value="utilities">Utilities</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="expense-amount" class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Amount</label>
+                    <input type="number" id="expense-amount" class="form-input text-xs py-2 w-full" placeholder="0.00" step="0.01" min="0" required>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- CONTENT SECTIONS -->
+    <section class="py-24 px-6 md:px-12 max-w-7xl mx-auto relative z-20">
+        <div class="mb-16">
+            <h2 class="text-3xl md:text-4xl tracking-tight font-normal text-white mb-4">Smart Money Management</h2>
+            <p class="text-zinc-400 text-base md:text-lg max-w-xl font-light">Everything you need to track expenses, build budgets, and grow your savings in one powerful platform.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group">
+                <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center mb-6 text-emerald-500 group-hover:scale-110 transition-transform">
+                    <iconify-icon icon="solar:chart-square-linear" style="stroke-width: 1.5;" class="text-xl"></iconify-icon>
+                </div>
+                <h3 class="text-xl tracking-tight font-normal text-white mb-2">Budget Planning</h3>
+                <p class="text-base text-zinc-400 font-light leading-relaxed">Create custom budgets for every category. Set spending limits and get alerts when you're approaching them.</p>
+            </div>
+            <div class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group cursor-pointer" id="expense-tracking-card">
+                <div class="flex justify-between items-start mb-6">
+                    <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
+                        <iconify-icon icon="solar:shield-check-linear" style="stroke-width: 1.5;" class="text-xl"></iconify-icon>
+                    </div>
+                    <span class="text-[10px] text-zinc-600 font-mono hidden md:inline border border-zinc-800 rounded px-1.5 py-0.5">Alt+M</span>
+                </div>
+                <h3 class="text-xl tracking-tight font-normal text-white mb-2">Expense Tracking</h3>
+                <p class="text-base text-zinc-400 font-light leading-relaxed">Automatically categorize transactions. See exactly where your money goes with visual reports and insights.</p>
+            </div>
+            <div class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group">
+                <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center mb-6 text-emerald-500 group-hover:scale-110 transition-transform">
+                    <iconify-icon icon="solar:wallet-money-linear" style="stroke-width: 1.5;" class="text-xl"></iconify-icon>
+                </div>
+                <h3 class="text-xl tracking-tight font-normal text-white mb-2">Savings Goals</h3>
+                <p class="text-base text-zinc-400 font-light leading-relaxed">Set financial goals and track progress. Whether it's a vacation or emergency fund, stay motivated to save.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CASE STUDY -->
+    <section class="py-24 border-y border-zinc-900 bg-zinc-950/50 relative z-20">
+        <div class="px-6 md:px-12 max-w-7xl mx-auto flex flex-col lg:flex-row gap-16 items-center">
+            <div class="w-full lg:w-1/2 relative">
+                <div class="relative w-full aspect-square md:aspect-[4/3] rounded-2xl overflow-hidden border border-zinc-800 group bg-zinc-900">
+                    <div class="w-full h-full bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 p-8 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-2xl font-normal text-white mb-2">Personal Budget</h3>
+                            <p class="text-sm text-zinc-400 mb-8">Monthly spending overview</p>
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm text-zinc-400">Housing</span>
+                                        <span class="text-sm text-white font-mono">$1,560 / $1,800</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: 87%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm text-zinc-400">Food & Dining</span>
+                                        <span class="text-sm text-white font-mono">$420 / $600</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width: 70%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm text-zinc-400">Transportation</span>
+                                        <span class="text-sm text-white font-mono">$280 / $400</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"><div class="h-full bg-amber-500 rounded-full" style="width: 70%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm text-zinc-400">Entertainment</span>
+                                        <span class="text-sm text-white font-mono">$150 / $300</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width: 50%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 mt-8 pt-6 border-t border-zinc-800">
+                            <div>
+                                <span class="text-xs text-zinc-500 uppercase tracking-widest font-mono block mb-1">Total Spent</span>
+                                <span class="text-xl text-white font-normal">$2,410</span>
+                            </div>
+                            <div>
+                                <span class="text-xs text-zinc-500 uppercase tracking-widest font-mono block mb-1">Remaining</span>
+                                <span class="text-xl text-emerald-500 font-normal">$690</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="w-full lg:w-1/2 space-y-8">
+                <div class="flex items-center gap-2">
+                    <iconify-icon icon="solar:pie-chart-2-linear" style="stroke-width: 1.5;" class="text-emerald-500 text-xl"></iconify-icon>
+                    <span class="font-mono text-xs text-emerald-500 uppercase tracking-widest">Budget Management</span>
+                </div>
+                <h2 class="text-3xl md:text-5xl tracking-tight font-normal text-white leading-tight">What is Personal Budget?</h2>
+                <p class="text-base md:text-lg text-zinc-400 font-light leading-relaxed">
+                    A personal budget is a financial plan that helps you manage your income and expenses. By allocating specific amounts to different spending categories like housing, food, and entertainment, you can ensure you're living within your means while saving for future goals.
+                </p>
+                <p class="text-base md:text-lg text-zinc-400 font-light leading-relaxed">
+                    Our smart budgeting tool tracks your spending in real-time, alerts you when you're approaching limits, and provides visual insights to help you make better financial decisions every day.
+                </p>
+                <div class="grid grid-cols-2 gap-8 pt-6 border-t border-zinc-900">
+                    <div><div class="text-4xl tracking-tight font-normal text-white mb-1">100%</div><div class="text-xs font-mono text-zinc-500 uppercase tracking-widest">Control</div></div>
+                    <div><div class="text-4xl tracking-tight font-normal text-white mb-1">24/7</div><div class="text-xs font-mono text-zinc-500 uppercase tracking-widest">Tracking</div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INTEGRATIONS -->
+    <section class="py-32 px-6 md:px-12 max-w-7xl mx-auto relative z-20 border-b border-zinc-900">
+        <div class="text-center mb-16 max-w-2xl mx-auto flex flex-col items-center">
+            <h2 class="text-4xl md:text-5xl tracking-tight font-normal text-white mb-6">Connect Everything.</h2>
+            <p class="text-base md:text-lg text-zinc-400 font-light text-balance leading-relaxed">
+                Sync with your bank accounts, credit cards, and investment platforms. All your financial data in one secure place.
+            </p>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:banknotes-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Bank Accounts</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Connect</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:card-transfer-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Credit Cards</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Connect</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:global-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Investment Apps</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Connect</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:chart-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Expense Reports</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Generate</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:safe-circle-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Bill Reminders</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Set Up</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:database-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Cloud Backup</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Enable</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:calculator-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Tax Calculator</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Calculate</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+            <div class="group p-8 rounded-xl bg-[#0c0c0e] border border-zinc-800/60 hover:bg-[#121214] hover:border-zinc-700 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden">
+                <div class="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-5 text-zinc-400 group-hover:text-white transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                    <iconify-icon icon="solar:leaf-linear" style="stroke-width: 1.5;" class="text-2xl"></iconify-icon>
+                </div>
+                <span class="text-base font-normal text-white mb-1">Goal Tracker</span>
+                <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-300 mt-2">
+                    <span class="text-xs font-mono text-emerald-400 uppercase tracking-widest">Track</span>
+                    <iconify-icon icon="solar:arrow-right-linear" style="stroke-width: 1.5;" class="text-emerald-400 text-xs"></iconify-icon>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#09090b] pt-20 pb-10 px-6 md:px-12 relative z-20 border-t border-zinc-900">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 lg:gap-8 mb-16">
+            <div class="lg:col-span-2 flex flex-col items-start">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-6 h-6 flex flex-col items-center justify-center rounded bg-white text-black font-mono text-xs font-normal">FF</div>
+                    <span class="text-lg tracking-tight text-white font-normal">FinanceFlow</span>
+                </div>
+                <p class="text-sm text-zinc-500 font-light leading-relaxed max-w-xs mb-6">
+                    Smart budgeting and expense tracking to help you save more, spend wisely, and reach your financial goals.
+                </p>
+            </div>
+            <div>
+                <h4 class="text-xs font-mono text-white uppercase tracking-widest mb-4">Features</h4>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">Budget Planning</a></li>
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">Expense Tracking</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-xs font-mono text-white uppercase tracking-widest mb-4">Resources</h4>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">Guide</a></li>
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">Support</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-xs font-mono text-white uppercase tracking-widest mb-4">Company</h4>
+                <ul class="space-y-3">
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">About</a></li>
+                    <li><a href="#" class="text-sm font-light text-zinc-500 hover:text-white transition-colors">Privacy</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="max-w-7xl mx-auto pt-8 border-t border-zinc-900/60 flex flex-col md:flex-row items-center justify-between gap-4">
+            <span class="text-xs font-light text-zinc-600">© 2024 FinanceFlow. All rights reserved.</span>
+            <div class="flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span class="text-xs font-mono text-zinc-500 uppercase tracking-widest">Secure & Encrypted</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- EXPENSE TRACKING MODAL -->
+    <div class="expense-modal" id="expense-modal">
+        <button class="close-modal" id="close-expense-modal" title="Press ESC to close">
+            <iconify-icon icon="solar:close-circle-linear" style="stroke-width: 1.5;" class="text-white text-xl"></iconify-icon>
+        </button>
+        
+        <div class="expense-bento-container">
+            <div class="mb-8 flex flex-col md:flex-row items-start md:items-end justify-between gap-4 pr-16">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-4xl md:text-5xl tracking-tight font-normal text-white mb-2">Expense Tracking</h2>
+                        <span class="text-[10px] text-zinc-600 font-mono hidden md:inline border border-zinc-800 rounded px-1.5 py-0.5 mt-2">ESC to close</span>
+                    </div>
+                    <p class="text-zinc-400 text-lg">Your financial overview at a glance</p>
+                </div>
+                
+                <div class="month-picker-container">
+                    <iconify-icon icon="solar:calendar-linear" style="stroke-width: 1.5;" class="text-emerald-500 text-lg"></iconify-icon>
+                    <input type="month" id="month-picker" class="month-picker">
+                </div>
+            </div>
+            
+            <div class="expense-bento-grid">
+                
+                <!-- CARD 1: Budget vs Actual Donut Chart -->
+                <div class="expense-card expense-card-wide">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="font-mono text-xs text-white uppercase tracking-widest">Budget vs. Actual by Category</h3>
+                        <iconify-icon icon="solar:pie-chart-2-linear" style="stroke-width: 1.5;" class="text-emerald-500"></iconify-icon>
+                    </div>
+                    
+                    <div class="donut-chart-container">
+                        <div class="donut-chart" id="donut-chart">
+                            <svg width="360" height="360" viewBox="0 0 360 360" id="donut-svg">
+                                <circle cx="180" cy="180" r="100" fill="none" stroke="#27272a" stroke-width="40"></circle>
+                                <circle cx="180" cy="180" r="145" fill="none" stroke="#27272a" stroke-width="30"></circle>
+                                <g id="donut-inner-segments"></g>
+                                <g id="donut-outer-segments"></g>
+                            </svg>
+                            <div class="donut-center-label">
+                                <div class="donut-center-title">Total Spend</div>
+                                <div class="donut-center-value" id="donut-total">$0</div>
+                                <div class="donut-center-subtitle" id="donut-subtitle">This Month</div>
+                            </div>
+                        </div>
+                        <div class="category-legend" id="category-legend"></div>
+                    </div>
+                </div>
+
+                <!-- CARD 2: Financial Overview -->
+                <div class="expense-card expense-card-tall">
+                    <div class="pb-6 border-b border-zinc-800/60 mb-6">
+                        <div class="stat-label" id="total-spend-label">Total Monthly Spend</div>
+                        <div class="stat-number" id="total-monthly-spend">$0</div>
+                    </div>
+                    
+                    <div class="pb-6 border-b border-zinc-800/60 mb-6">
+                        <div class="stat-label mb-4">Income vs. Expense</div>
+                        <div class="comparison-bar">
+                            <div class="bar-item">
+                                <div class="text-xs text-zinc-400 mb-1">Income</div>
+                                <div class="bar-fill"><div class="bar-fill-inner bg-emerald-500" id="income-bar" style="width: 0%"></div></div>
+                                <div class="text-xs text-white mt-1 font-mono" id="income-amount">$0</div>
+                            </div>
+                            <div class="bar-item">
+                                <div class="text-xs text-zinc-400 mb-1">Expense</div>
+                                <div class="bar-fill"><div class="bar-fill-inner bg-red-500" id="expense-bar" style="width: 0%"></div></div>
+                                <div class="text-xs text-white mt-1 font-mono" id="expense-amount">$0</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="stat-label">Safe-to-Spend</div>
+                        <div class="text-2xl font-normal text-white font-mono" id="safe-to-spend">$0</div>
+                        <div class="text-xs text-zinc-500 mt-2">After bills & savings</div>
+                        
+                        <div class="daily-allowance-card">
+                            <div class="daily-allowance-label">Daily Allowance</div>
+                            <div class="daily-allowance-amount" id="daily-allowance">$0</div>
+                            <div class="daily-allowance-days" id="days-remaining">0 days left this month</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 3: Expense History -->
+                <div class="expense-card expense-card-large">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-mono text-xs text-white uppercase tracking-widest">Expense History</h3>
+                        <iconify-icon icon="solar:history-linear" style="stroke-width: 1.5;" class="text-emerald-500"></iconify-icon>
+                    </div>
+                    
+                    <div class="search-filter-container">
+                        <div class="search-wrapper">
+                            <iconify-icon icon="solar:magnifer-linear" style="stroke-width: 1.5;" class="search-icon"></iconify-icon>
+                            <input type="text" id="expense-search" class="search-input" placeholder="Search expenses...">
+                        </div>
+                        
+                        <select id="category-filter" class="category-filter-select">
+                            <option value="all">All Categories</option>
+                            <option value="housing">Housing</option>
+                            <option value="food">Food & Dining</option>
+                            <option value="transportation">Transportation</option>
+                            <option value="entertainment">Entertainment</option>
+                            <option value="healthcare">Healthcare</option>
+                            <option value="shopping">Shopping</option>
+                            <option value="utilities">Utilities</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="expense-history" id="expense-history-list">
+                        <div class="text-center text-zinc-500 text-sm py-8">No expenses recorded yet</div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+
+    <script type="x-shader/x-vertex" id="vertexShader">
+        uniform float uTime; uniform float uDistortion; uniform float uSize; uniform vec2 uMouse;
+        varying float vAlpha; varying vec3 vPos; varying float vNoise;
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0); const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+            vec3 i = floor(v + dot(v, C.yyy)); vec3 x0 = v - i + dot(i, C.xxx);
+            vec3 g = step(x0.yzx, x0.xyz); vec3 l = 1.0 - g;
+            vec3 i1 = min(g.xyz, l.zxy); vec3 i2 = max(g.xyz, l.zxy);
+            vec3 x1 = x0 - i1 + 1.0 * C.xxx; vec3 x2 = x0 - i2 + 2.0 * C.xxx; vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+            i = mod289(i);
+            vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+            float n_ = 1.0/7.0; vec3 ns = n_ * D.wyz - D.xzx;
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z); vec4 x_ = floor(j * ns.z); vec4 y_ = floor(j - 7.0 * x_);
+            vec4 x = x_ * ns.x + ns.yyyy; vec4 y = y_ * ns.x + ns.yyyy; vec4 h = 1.0 - abs(x) - abs(y);
+            vec4 b0 = vec4(x.xy, y.xy); vec4 b1 = vec4(x.zw, y.zw);
+            vec4 s0 = floor(b0)*2.0 + 1.0; vec4 s1 = floor(b1)*2.0 + 1.0; vec4 sh = -step(h, vec4(0.0));
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy; vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+            vec3 p0 = vec3(a0.xy,h.x); vec3 p1 = vec3(a0.zw,h.y); vec3 p2 = vec3(a1.xy,h.z); vec3 p3 = vec3(a1.zw,h.w);
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m; return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
+        void main() {
+            vec3 pos = position; float noiseFreq = 0.8; float noiseAmp = uDistortion;
+            float noise = snoise(vec3(pos.x * noiseFreq + uTime * 0.2, pos.y * noiseFreq, pos.z * noiseFreq));
+            vNoise = noise; vec3 newPos = pos + (normalize(pos) * noise * noiseAmp);
+            float dist = distance(uMouse * 10.0, newPos.xy); float interaction = smoothstep(5.0, 0.0, dist);
+            newPos += normalize(pos) * interaction * 0.8; vec4 mvPosition = modelViewMatrix * vec4(newPos, 1.0);
+            gl_Position = projectionMatrix * mvPosition; gl_PointSize = uSize * (20.0 / -mvPosition.z) * (1.0 + noise * 0.2);
+            vAlpha = 1.0; vPos = newPos;
+        }
+    </script>
+
+    <script type="x-shader/x-fragment" id="fragmentShader">
+        uniform vec3 uColor; uniform float uOpacity; varying float vNoise; varying vec3 vPos;
+        void main() {
+            vec2 center = gl_PointCoord - vec2(0.5); float dist = length(center);
+            if (dist > 0.5) discard;
+            float alpha = smoothstep(0.5, 0.1, dist) * uOpacity;
+            vec3 darkColor = uColor * 0.3; vec3 lightColor = uColor * 2.5;
+            vec3 finalColor = mix(darkColor, lightColor, vNoise * 0.6 + 0.4);
+            gl_FragColor = vec4(finalColor, alpha);
+        }
+    </script>
+
+    <!-- ==================== FIREBASE INTEGRATION ==================== -->
+    <script type="module">
+        // 1. Import Firebase modules
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, orderBy, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // 2. YOUR Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBMkd3pdv_KwzDMMuRSPG6scVb52txbIwA",
+            authDomain: "financeflow-4a92a.firebaseapp.com",
+            projectId: "financeflow-4a92a",
+            storageBucket: "financeflow-4a92a.firebasestorage.app",
+            messagingSenderId: "847970406118",
+            appId: "1:847970406118:web:adb9d01a4cb28e6a557527"
+        };
+
+        // 3. Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // 4. Track current user
+        let currentUser = null;
+        window.currentUser = currentUser;
+
+        // 5. Listen for auth state changes
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            window.currentUser = user;
+            
+            if (user) {
+                console.log('✅ Logged in as:', user.email);
+                document.getElementById('open-login-btn').textContent = 'Log Out';
+                
+                // Show user badge
+                document.getElementById('user-badge').classList.remove('hidden');
+                document.getElementById('user-avatar').src = user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.email);
+                document.getElementById('user-email').textContent = user.email.split('@')[0];
+                
+                loadUserData();
+            } else {
+                console.log('❌ Not logged in');
+                document.getElementById('open-login-btn').textContent = 'Log In';
+                document.getElementById('user-badge').classList.add('hidden');
+            }
+        });
+
+        // 6. LOGIN/LOGOUT
+        document.getElementById('open-login-btn').addEventListener('click', async () => {
+            if (currentUser) {
+                // Log out
+                if (confirm('Are you sure you want to log out?')) {
+                    await signOut(auth);
+                    localStorage.clear();
+                    location.reload();
+                }
+            } else {
+                // Log in with Google
+                const provider = new GoogleAuthProvider();
+                try {
+                    const result = await signInWithPopup(auth, provider);
+                    console.log('✅ Logged in:', result.user.email);
+                } catch (error) {
+                    console.error('Login error:', error);
+                    alert('Login failed: ' + error.message);
+                }
+            }
+        });
+
+        // 7. SAVE EXPENSE TO FIRESTORE
+        window.saveExpenseToFirebase = async function(expense) {
+            if (!currentUser) {
+                alert('⚠️ Please log in with Google to save expenses to the cloud!');
+                return false;
+            }
+
+            try {
+                const docRef = await addDoc(collection(db, 'expenses'), {
+                    userId: currentUser.uid,
+                    date: expense.date,
+                    name: expense.name,
+                    category: expense.category,
+                    amount: expense.amount,
+                    currency: window.currentCurrency,
+                    createdAt: new Date()
+                });
+                console.log('✅ Expense saved to Firebase with ID:', docRef.id);
+                return true;
+            } catch (error) {
+                console.error('❌ Error saving expense:', error);
+                alert('Failed to save expense: ' + error.message);
+                return false;
+            }
+        };
+
+        // 8. GET EXPENSES FROM FIRESTORE
+        window.getExpensesFromFirebase = async function() {
+            if (!currentUser) {
+                console.log('Not logged in, using localStorage');
+                return JSON.parse(localStorage.getItem('expenses') || '[]');
+            }
+
+            try {
+                const q = query(
+                    collection(db, 'expenses'),
+                    where('userId', '==', currentUser.uid),
+                    orderBy('createdAt', 'desc')
+                );
+                const snapshot = await getDocs(q);
+                const expenses = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    date: doc.data().date || new Date().toISOString().split('T')[0]
+                }));
+                
+                console.log(`✅ Loaded ${expenses.length} expenses from Firebase`);
+                
+                // Save to localStorage as backup
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                return expenses;
+            } catch (error) {
+                console.error('❌ Error loading expenses:', error);
+                // Fallback to localStorage
+                return JSON.parse(localStorage.getItem('expenses') || '[]');
+            }
+        };
+
+        // 9. UPDATE EXPENSE
+        window.updateExpenseInFirebase = async function(id, updates) {
+            if (!currentUser) return;
+
+            try {
+                await updateDoc(doc(db, 'expenses', id), {
+                    ...updates,
+                    updatedAt: new Date()
+                });
+                console.log('✅ Expense updated in Firebase');
+            } catch (error) {
+                console.error('❌ Error updating expense:', error);
+            }
+        };
+
+        // 10. DELETE EXPENSE
+        window.deleteExpenseFromFirebase = async function(id) {
+            if (!currentUser) return;
+
+            try {
+                await deleteDoc(doc(db, 'expenses', id));
+                console.log('✅ Expense deleted from Firebase');
+            } catch (error) {
+                console.error('❌ Error deleting expense:', error);
+            }
+        };
+
+        // 11. SAVE BUDGET SETTINGS
+        window.saveBudgetToFirebase = async function(budget) {
+            if (!currentUser) return;
+
+            try {
+                const userDocRef = doc(db, 'users', currentUser.uid);
+                await setDoc(userDocRef, { 
+                    budget,
+                    updatedAt: new Date()
+                }, { merge: true });
+                console.log('✅ Budget saved to Firebase');
+            } catch (error) {
+                console.error('❌ Error saving budget:', error);
+            }
+        };
+
+        // 12. LOAD USER DATA
+        async function loadUserData() {
+            if (!currentUser) return;
+
+            console.log('🔄 Loading user data from Firebase...');
+
+            // Load expenses from Firebase
+            const expenses = await getExpensesFromFirebase();
+
+            // Load budget settings
+            try {
+                const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    if (data.budget) {
+                        document.getElementById('input-needs').value = data.budget.needs || 50;
+                        document.getElementById('input-wants').value = data.budget.wants || 30;
+                        document.getElementById('input-savings').value = data.budget.savings || 20;
+                        document.getElementById('income-input').dataset.value = data.budget.income || 5200;
+                        
+                        // Trigger UI update
+                        if (typeof window.updateBudgetAllocation === 'function') {
+                            window.updateBudgetAllocation();
+                        }
+                        console.log('✅ Budget settings loaded from Firebase');
+                    }
+                }
+            } catch (error) {
+                console.log('No saved budget settings or error:', error);
+            }
+
+            // Refresh expense modal if open
+            if (document.getElementById('expense-modal').classList.contains('active')) {
+                if (typeof window.updateExpenseModal === 'function') {
+                    await window.updateExpenseModal();
+                }
+            }
+        }
+
+        console.log('🔥 Firebase initialized and ready!');
+    </script>
+
+    <!-- ==================== MAIN APPLICATION CODE ==================== -->
+    <script>
+        // ==================== CONSTANTS ====================
+        const EXCHANGE_RATE = 25450;
+        const DONUT_CENTER_X = 180;
+        const DONUT_CENTER_Y = 180;
+        const DONUT_INNER_RADIUS = 100;
+        const DONUT_OUTER_RADIUS = 145;
+        const DONUT_INNER_STROKE = 40;
+        const DONUT_OUTER_STROKE = 30;
+
+        // ==================== CURRENCY STATE ====================
+        let currentCurrency = localStorage.getItem('currency') || 'USD';
+        window.currentCurrency = currentCurrency;
+
+        // ==================== UTILITY FUNCTIONS ====================
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatNumber(num) {
+            if (currentCurrency === 'VND') {
+                return new Intl.NumberFormat('vi-VN').format(num);
+            } else {
+                return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num);
+            }
+        }
+
+        function formatCurrency(amount, showDecimals = false) {
+            if (currentCurrency === 'VND') {
+                return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount);
+            } else {
+                return new Intl.NumberFormat('en-US', { 
+                    style: 'currency', 
+                    currency: 'USD', 
+                    minimumFractionDigits: showDecimals ? 2 : 0, 
+                    maximumFractionDigits: showDecimals ? 2 : 0 
+                }).format(amount);
+            }
+        }
+
+        function convertCurrencyData(oldCur, newCur) {
+            if (oldCur === newCur) return;
+            const multiplier = (oldCur === 'USD' && newCur === 'VND') ? EXCHANGE_RATE : (1 / EXCHANGE_RATE);
+            
+            const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+            expenses.forEach(exp => exp.amount *= multiplier);
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+            
+            const incomeInput = document.getElementById('income-input');
+            let income = parseFloat(incomeInput.dataset.value) || 0;
+            income *= multiplier;
+            incomeInput.dataset.value = income;
+            localStorage.setItem('income', income);
+            incomeInput.value = formatNumber(income);
+        }
+
+        function getPastelRainbowColor(position) { 
+            return `hsl(${position * 360}, 70%, 75%)`; 
+        }
+
+        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+            return { 
+                x: centerX + (radius * Math.cos(angleInRadians)), 
+                y: centerY + (radius * Math.sin(angleInRadians)) 
+            };
+        }
+
+        function describeArc(x, y, radius, startAngle, endAngle) {
+            const gapSize = 0.5;
+            const adjustedStartAngle = startAngle + gapSize;
+            const adjustedEndAngle = endAngle - gapSize;
+            const start = polarToCartesian(x, y, radius, adjustedEndAngle);
+            const end = polarToCartesian(x, y, radius, adjustedStartAngle);
+            const largeArcFlag = (adjustedEndAngle - adjustedStartAngle) <= 180 ? "0" : "1";
+            return ["M", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y].join(" ");
+        }
+
+        function getCategoryBudgetPercentage(category) {
+            const needsPercent = parseInt(document.getElementById('input-needs').value);
+            const wantsPercent = parseInt(document.getElementById('input-wants').value);
+            const needsCategories = ['housing', 'food', 'transportation', 'healthcare', 'utilities'];
+            const wantsCategories = ['entertainment', 'shopping', 'other'];
+            
+            if (needsCategories.includes(category.toLowerCase())) return needsPercent;
+            else if (wantsCategories.includes(category.toLowerCase())) return wantsPercent;
+            return 0;
+        }
+
+        function getCurrentMonth() {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[new Date().getMonth()];
+        }
+
+        function getMonthName(monthIndex) {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            return months[monthIndex];
+        }
+
+        function getDaysRemainingInMonth(year, month) {
+            const lastDay = new Date(year, month + 1, 0);
+            const now = new Date();
+            if (year === now.getFullYear() && month === now.getMonth()) {
+                return lastDay.getDate() - now.getDate() + 1;
+            }
+            return lastDay.getDate();
+        }
+
+        // ==================== BUDGET ALLOCATION UPDATES ====================
+        function updateBudgetAllocation() {
+            const needsSlider = document.getElementById('input-needs');
+            const wantsSlider = document.getElementById('input-wants');
+            const savingsSlider = document.getElementById('input-savings');
+            const needsInput = document.getElementById('val-needs');
+            const wantsInput = document.getElementById('val-wants');
+            const savingsInput = document.getElementById('val-savings');
+            const totalPercentage = document.getElementById('total-percentage');
+            
+            const needs = parseInt(needsSlider.value);
+            const wants = parseInt(wantsSlider.value);
+            const savings = parseInt(savingsSlider.value);
+            const total = needs + wants + savings;
+            
+            needsInput.value = needs + '%';
+            wantsInput.value = wants + '%';
+            savingsInput.value = savings + '%';
+            totalPercentage.textContent = total + '%';
+            
+            if (total === 100) totalPercentage.style.color = '#10b981';
+            else if (total < 100) totalPercentage.style.color = '#f59e0b';
+            else totalPercentage.style.color = '#ef4444';
+            
+            if (typeof uniforms !== 'undefined') {
+                uniforms.uDistortion.value = needs / 100;
+            }
+            
+            const income = parseFloat(document.getElementById('income-input').dataset.value) || 0;
+            document.getElementById('amount-needs').textContent = formatCurrency(income * needs / 100);
+            document.getElementById('amount-wants').textContent = formatCurrency(income * wants / 100);
+            document.getElementById('amount-savings').textContent = formatCurrency(income * savings / 100);
+
+            // Save to Firebase if logged in
+            if (window.currentUser && typeof window.saveBudgetToFirebase === 'function') {
+                window.saveBudgetToFirebase({
+                    needs: needs,
+                    wants: wants,
+                    savings: savings,
+                    income: income
+                });
+            }
+        }
+        window.updateBudgetAllocation = updateBudgetAllocation;
+
+        function setupPercentageInput(inputEl, sliderEl) {
+            inputEl.addEventListener('focus', function() {
+                this.value = this.value.replace('%', '');
+                this.select();
+            });
+            
+            inputEl.addEventListener('blur', function() {
+                let val = parseInt(this.value) || 0;
+                val = Math.max(0, Math.min(100, val));
+                this.value = val + '%';
+                sliderEl.value = val;
+                updateBudgetAllocation();
+            });
+            
+            inputEl.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') this.blur();
+                if (e.key < '0' || e.key > '9') e.preventDefault();
+            });
+        }
+
+        // ==================== EXPENSE MODAL FUNCTIONS ====================
+        
+        async function updateExpenseModal() {
+            const expenses = await window.getExpensesFromFirebase();
+            const income = parseFloat(localStorage.getItem('income')) || parseFloat(document.getElementById('income-input').dataset.value) || 0;
+            
+            // Filter by selected month
+            const filtered = expenses.filter(exp => {
+                const expDate = new Date(exp.date);
+                return expDate.getMonth() === selectedMonth && expDate.getFullYear() === selectedYear;
+            });
+            
+            // Apply search + category filter
+            const searchTerm = currentSearchTerm.toLowerCase();
+            const final = filtered.filter(exp => {
+                const matchesSearch = exp.name.toLowerCase().includes(searchTerm);
+                const matchesCategory = currentFilter === 'all' || exp.category === currentFilter;
+                return matchesSearch && matchesCategory;
+            });
+            
+            // Calculate totals by category
+            const categoryTotals = {};
+            final.forEach(exp => {
+                if (!categoryTotals[exp.category]) categoryTotals[exp.category] = 0;
+                categoryTotals[exp.category] += exp.amount;
+            });
+            
+            const totalSpend = final.reduce((sum, exp) => sum + exp.amount, 0);
+            
+            // Update UI
+            updateExpenseHistoryList(final);
+            updateRainbowDonutChart(categoryTotals, totalSpend, income);
+            updateFinancialStats(totalSpend, income);
+        }
+        window.updateExpenseModal = updateExpenseModal;
+
+        function updateExpenseHistoryList(expenses) {
+            const historyList = document.getElementById('expense-history-list');
+            
+            if (expenses.length === 0) {
+                historyList.innerHTML = '<div class="text-center text-zinc-500 text-sm py-8">No expenses found</div>';
+                return;
+            }
+            
+            // Sort by date (newest first)
+            expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            historyList.innerHTML = expenses.map(exp => `
+                <div class="expense-history-item" data-id="${exp.id}">
+                    <div class="flex-1">
+                        <input type="text" 
+                               class="expense-name-editable" 
+                               value="${escapeHtml(exp.name)}" 
+                               data-id="${exp.id}"
+                               readonly>
+                        <div class="text-xs text-zinc-500 mt-1">
+                            <input type="text" 
+                                   class="expense-category-editable" 
+                                   value="${exp.category}" 
+                                   data-id="${exp.id}"
+                                   readonly>
+                            <span class="mx-1">•</span>
+                            <span>${new Date(exp.date).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" 
+                               class="expense-amount-editable" 
+                               value="${exp.amount}" 
+                               data-id="${exp.id}"
+                               step="${currentCurrency === 'USD' ? '0.01' : '1'}"
+                               readonly>
+                        <div class="action-buttons" style="opacity: 0.4;">
+                            <button onclick="toggleEditExpense('${exp.id}')" 
+                                    class="p-1 hover:bg-zinc-800 rounded" 
+                                    title="Edit">
+                                <iconify-icon icon="solar:pen-linear" class="text-zinc-400"></iconify-icon>
+                            </button>
+                            <button onclick="deleteExpense('${exp.id}')" 
+                                    class="p-1 hover:bg-red-900/20 rounded" 
+                                    title="Delete">
+                                <iconify-icon icon="solar:trash-bin-linear" class="text-red-400"></iconify-icon>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateFinancialStats(totalSpend, income) {
+            document.getElementById('total-monthly-spend').textContent = formatCurrency(totalSpend);
+            
+            const maxAmount = Math.max(income, totalSpend);
+            document.getElementById('income-bar').style.width = `${(income / maxAmount) * 100}%`;
+            document.getElementById('expense-bar').style.width = `${(totalSpend / maxAmount) * 100}%`;
+            document.getElementById('income-amount').textContent = formatCurrency(income);
+            document.getElementById('expense-amount').textContent = formatCurrency(totalSpend);
+            
+            const savingsPercent = parseInt(document.getElementById('input-savings').value);
+            const plannedSavings = income * savingsPercent / 100;
+            const safeToSpend = income - totalSpend - plannedSavings;
+            document.getElementById('safe-to-spend').textContent = formatCurrency(Math.max(0, safeToSpend));
+            
+            const daysLeft = getDaysRemainingInMonth(selectedYear, selectedMonth);
+            const dailyAllowance = safeToSpend > 0 ? safeToSpend / daysLeft : 0;
+            document.getElementById('daily-allowance').textContent = formatCurrency(dailyAllowance);
+            document.getElementById('days-remaining').textContent = `${daysLeft} days left this month`;
+        }
+
+        function updateRainbowDonutChart(categoryTotals, totalSpend, income) {
+            const innerSegments = document.getElementById('donut-inner-segments');
+            const outerSegments = document.getElementById('donut-outer-segments');
+            const legend = document.getElementById('category-legend');
+            
+            innerSegments.innerHTML = '';
+            outerSegments.innerHTML = '';
+            legend.innerHTML = '';
+            
+            document.getElementById('donut-total').textContent = formatCurrency(totalSpend);
+            
+            if (totalSpend === 0 || Object.keys(categoryTotals).length === 0) {
+                legend.innerHTML = '<div class="text-center text-zinc-500 text-sm py-8">No expenses to display</div>';
+                return;
+            }
+            
+            const categories = Object.keys(categoryTotals).sort((a, b) => categoryTotals[b] - categoryTotals[a]);
+            let startAngleInner = 0;
+            let startAngleOuter = 0;
+            
+            categories.forEach((category, index) => {
+                const categorySpend = categoryTotals[category];
+                const categoryPercent = (categorySpend / totalSpend) * 100;
+                const sweepAngle = (categoryPercent / 100) * 360;
+                
+                const budgetPercent = getCategoryBudgetPercentage(category);
+                const budgetAmount = income * budgetPercent / 100;
+                
+                const color = getPastelRainbowColor(index / categories.length);
+                
+                // Inner ring = Actual spending
+                const innerPath = describeArc(DONUT_CENTER_X, DONUT_CENTER_Y, DONUT_INNER_RADIUS, startAngleInner, startAngleInner + sweepAngle);
+                const innerSegment = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                innerSegment.setAttribute('d', innerPath);
+                innerSegment.setAttribute('fill', 'none');
+                innerSegment.setAttribute('stroke', color);
+                innerSegment.setAttribute('stroke-width', DONUT_INNER_STROKE);
+                innerSegment.classList.add('donut-segment');
+                innerSegments.appendChild(innerSegment);
+                
+                // Outer ring = Budget allocation
+                if (budgetAmount > 0) {
+                    const budgetSweep = (budgetAmount / income) * 360;
+                    const outerPath = describeArc(DONUT_CENTER_X, DONUT_CENTER_Y, DONUT_OUTER_RADIUS, startAngleOuter, startAngleOuter + budgetSweep);
+                    const outerSegment = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    outerSegment.setAttribute('d', outerPath);
+                    outerSegment.setAttribute('fill', 'none');
+                    outerSegment.setAttribute('stroke', color);
+                    outerSegment.setAttribute('stroke-width', DONUT_OUTER_STROKE);
+                    outerSegment.style.opacity = '0.4';
+                    outerSegment.classList.add('donut-segment');
+                    outerSegments.appendChild(outerSegment);
+                    startAngleOuter += budgetSweep;
+                }
+                
+                // Legend
+                const budgetStatus = categorySpend > budgetAmount ? 'over-budget' : (categorySpend >= budgetAmount * 0.9 ? 'at-budget' : 'under-budget');
+                const progressPercent = budgetAmount > 0 ? Math.min((categorySpend / budgetAmount) * 100, 100) : 0;
+                
+                const legendItem = document.createElement('div');
+                legendItem.classList.add('legend-item');
+                legendItem.innerHTML = `
+                    <div class="legend-item-header">
+                        <div class="legend-color" style="background: ${color};"></div>
+                        <div class="legend-text">${category}</div>
+                        <div class="legend-percentage">${categoryPercent.toFixed(1)}%</div>
+                        <div class="legend-amount">${formatCurrency(categorySpend)}</div>
+                    </div>
+                    ${budgetAmount > 0 ? `
+                    <div class="budget-progress">
+                        <div class="budget-progress-bar">
+                            <div class="budget-progress-fill ${budgetStatus}" style="width: ${progressPercent}%;"></div>
+                            <div class="budget-limit-marker" style="left: 100%;"></div>
+                        </div>
+                        <div class="budget-info">
+                            <span class="budget-spent">${formatCurrency(categorySpend)} spent</span>
+                            <span class="budget-limit">${formatCurrency(budgetAmount)} budget</span>
+                        </div>
+                    </div>
+                    ` : ''}
+                `;
+                legend.appendChild(legendItem);
+                
+                startAngleInner += sweepAngle;
+            });
+        }
+
+        async function toggleEditExpense(id) {
+            const expenses = await window.getExpensesFromFirebase();
+            const expenseRow = document.querySelector(`.expense-history-item[data-id="${id}"]`);
+            
+            if (!expenseRow) return;
+            
+            const isEditing = expenseRow.classList.contains('editing');
+            
+            if (isEditing) {
+                // Save changes
+                const nameInput = expenseRow.querySelector('.expense-name-editable');
+                const categoryInput = expenseRow.querySelector('.expense-category-editable');
+                const amountInput = expenseRow.querySelector('.expense-amount-editable');
+                
+                const updates = {
+                    name: nameInput.value,
+                    category: categoryInput.value,
+                    amount: parseFloat(amountInput.value) || 0
+                };
+                
+                // Update in Firebase
+                await window.updateExpenseInFirebase(id, updates);
+                
+                // Update in localStorage
+                const expenseIndex = expenses.findIndex(exp => exp.id === id);
+                if (expenseIndex !== -1) {
+                    expenses[expenseIndex] = { ...expenses[expenseIndex], ...updates };
+                    localStorage.setItem('expenses', JSON.stringify(expenses));
+                }
+                
+                updateExpenseModal();
+            } else {
+                // Enable editing
+                document.querySelectorAll('.expense-history-item.editing').forEach(row => {
+                    row.classList.remove('editing');
+                    row.querySelectorAll('input').forEach(input => input.readOnly = true);
+                });
+                
+                expenseRow.classList.add('editing');
+                expenseRow.querySelectorAll('input').forEach(input => input.readOnly = false);
+                expenseRow.querySelector('.expense-name-editable').focus();
+            }
+        }
+        window.toggleEditExpense = toggleEditExpense;
+
+        async function deleteExpense(id) {
+            if (!confirm('Are you sure you want to delete this expense?')) return;
+            
+            // Delete from Firebase
+            await window.deleteExpenseFromFirebase(id);
+            
+            // Delete from localStorage
+            const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+            const filtered = expenses.filter(exp => exp.id !== id);
+            localStorage.setItem('expenses', JSON.stringify(filtered));
+            
+            updateExpenseModal();
+        }
+        window.deleteExpense = deleteExpense;
+
+        // ==================== INITIALIZATION ====================
+        document.getElementById('current-currency-label').innerHTML = `${currentCurrency} <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[10px]"></iconify-icon>`;
+        document.getElementById('expense-amount').placeholder = currentCurrency === 'USD' ? '0.00' : '0';
+        document.getElementById('expense-amount').step = currentCurrency === 'USD' ? '0.01' : '1';
+        document.getElementById('current-month').textContent = getCurrentMonth();
+
+        let currentFilter = 'all';
+        let currentSearchTerm = '';
+        let selectedMonth = new Date().getMonth();
+        let selectedYear = new Date().getFullYear();
+
+        // ==================== CURRENCY SWITCHER ====================
+        document.querySelectorAll('.currency-selector').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.target.closest('button');
+                const newCurrency = target.getAttribute('data-currency');
+                
+                if (newCurrency !== currentCurrency) {
+                    convertCurrencyData(currentCurrency, newCurrency);
+                    currentCurrency = newCurrency;
+                    window.currentCurrency = newCurrency;
+                    localStorage.setItem('currency', currentCurrency);
+                    
+                    document.getElementById('expense-amount').placeholder = currentCurrency === 'USD' ? '0.00' : '0';
+                    document.getElementById('expense-amount').step = currentCurrency === 'USD' ? '0.01' : '1';
+                    document.getElementById('current-currency-label').innerHTML = `${currentCurrency} <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[10px]"></iconify-icon>`;
+                    
+                    updateBudgetAllocation();
+                    
+                    if (document.getElementById('expense-modal').classList.contains('active')) {
+                        updateExpenseModal();
+                    }
+                }
+            });
+        });
+
+        // ==================== INCOME INPUT ====================
+        const incomeInput = document.getElementById('income-input');
+        let rawIncome = parseFloat(localStorage.getItem('income')) || (currentCurrency === 'VND' ? 5200 * EXCHANGE_RATE : 5200);
+        incomeInput.dataset.value = rawIncome;
+        incomeInput.value = formatNumber(rawIncome);
+
+        incomeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+            }
+        });
+
+        incomeInput.addEventListener('focus', function() {
+            let val = parseFloat(this.dataset.value) || 0;
+            if (currentCurrency === 'VND') val = val / 1000;
+            this.value = val;
+        });
+
+        incomeInput.addEventListener('blur', function() {
+            let typed = parseFloat(this.value) || 0;
+            if (currentCurrency === 'VND') typed = typed * 1000;
+            this.dataset.value = typed;
+            localStorage.setItem('income', typed);
+            this.value = formatNumber(typed);
+            updateBudgetAllocation();
+            
+            if (document.getElementById('expense-modal').classList.contains('active')) {
+                updateExpenseModal();
+            }
+        });
+
+        // ==================== BUDGET SLIDERS ====================
+        const needsSlider = document.getElementById('input-needs');
+        const wantsSlider = document.getElementById('input-wants');
+        const savingsSlider = document.getElementById('input-savings');
+        const needsInput = document.getElementById('val-needs');
+        const wantsInput = document.getElementById('val-wants');
+        const savingsInput = document.getElementById('val-savings');
+
+        needsSlider.addEventListener('input', updateBudgetAllocation);
+        wantsSlider.addEventListener('input', (e) => {
+            updateBudgetAllocation();
+            if (typeof uniforms !== 'undefined') {
+                uniforms.uSize.value = (parseInt(e.target.value) / 50) * 2.0;
+            }
+        });
+        savingsSlider.addEventListener('input', (e) => {
+            updateBudgetAllocation();
+            if (typeof uniforms !== 'undefined') {
+                uniforms.uOpacity.value = parseInt(e.target.value) / 100;
+            }
+        });
+
+        setupPercentageInput(needsInput, needsSlider);
+        setupPercentageInput(wantsInput, wantsSlider);
+        setupPercentageInput(savingsInput, savingsSlider);
+
+        updateBudgetAllocation();
+
+        // ==================== EXPENSE FORM SUBMISSION ====================
+        const expenseForm = document.getElementById('expense-form');
+        const expenseDate = document.getElementById('expense-date');
+        expenseDate.valueAsDate = new Date();
+
+        expenseForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            let amount = parseFloat(document.getElementById('expense-amount').value);
+            if (currentCurrency === 'VND') amount *= 1000;
+            
+            const formData = {
+                date: document.getElementById('expense-date').value,
+                name: document.getElementById('expense-name').value,
+                category: document.getElementById('expense-category').value,
+                amount: amount
+            };
+            
+            // Save to Firebase
+            const saved = await window.saveExpenseToFirebase(formData);
+            
+            if (saved) {
+                // Also save to localStorage as backup
+                const expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+                expenses.push({ id: Date.now(), ...formData });
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                
+                if (document.getElementById('expense-modal').classList.contains('active')) {
+                    await updateExpenseModal();
+                }
+                
+                const submitBtn = expenseForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<iconify-icon icon="solar:check-circle-linear"></iconify-icon> Saved to Cloud!';
+                submitBtn.classList.add('bg-green-600');
+                submitBtn.classList.remove('bg-emerald-600');
+                
+                setTimeout(() => {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.classList.remove('bg-green-600');
+                    submitBtn.classList.add('bg-emerald-600');
+                }, 2000);
+                
+                document.getElementById('expense-name').value = '';
+                document.getElementById('expense-category').value = '';
+                document.getElementById('expense-amount').value = '';
+            }
+        });
+
+        const expenseFormInputs = document.querySelectorAll('#expense-form input, #expense-form select');
+        expenseFormInputs.forEach(input => {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const form = document.getElementById('expense-form');
+                    if (form.checkValidity()) {
+                        form.querySelector('button[type="submit"]').click();
+                    } else {
+                        form.reportValidity();
+                    }
+                }
+            });
+        });
+
+        // ==================== MODAL CONTROLS ====================
+        const expenseTrackingCard = document.getElementById('expense-tracking-card');
+        const expenseModal = document.getElementById('expense-modal');
+        const closeExpenseModal = document.getElementById('close-expense-modal');
+
+        expenseTrackingCard.addEventListener('click', () => {
+            expenseModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            updateExpenseModal();
+        });
+
+        closeExpenseModal.addEventListener('click', () => {
+            expenseModal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        });
+
+        expenseModal.addEventListener('click', (e) => {
+            if (e.target === expenseModal) {
+                expenseModal.classList.remove('active');
+                document.body.style.overflow = 'auto';
+            }
+        });
+
+        // ==================== KEYBOARD SHORTCUTS ====================
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const editingRow = document.querySelector('.expense-history-item.editing');
+                if (editingRow) {
+                    updateExpenseModal();
+                } else if (expenseModal.classList.contains('active')) {
+                    expenseModal.classList.remove('active');
+                    document.body.style.overflow = 'auto';
+                }
+            }
+            
+            if (e.key === 'Enter') {
+                const editingRow = e.target.closest('.expense-history-item.editing');
+                if (editingRow) {
+                    e.preventDefault();
+                    const id = editingRow.dataset.id;
+                    toggleEditExpense(id);
+                }
+            }
+
+            if (e.altKey && e.key.toLowerCase() === 'm') {
+                e.preventDefault();
+                expenseModal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                updateExpenseModal();
+            }
+
+            if (e.altKey && e.key.toLowerCase() === 'e') {
+                e.preventDefault();
+                if (expenseModal.classList.contains('active')) {
+                    expenseModal.classList.remove('active');
+                    document.body.style.overflow = 'auto';
+                }
+                document.getElementById('expense-name').focus();
+            }
+        });
+
+        // ==================== MONTH PICKER & SEARCH/FILTER ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            const monthPicker = document.getElementById('month-picker');
+            const now = new Date();
+            const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            monthPicker.value = currentYearMonth;
+            selectedMonth = now.getMonth();
+            selectedYear = now.getFullYear();
+            
+            monthPicker.addEventListener('change', (e) => {
+                const [year, month] = e.target.value.split('-');
+                selectedYear = parseInt(year);
+                selectedMonth = parseInt(month) - 1;
+                
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                    'July', 'August', 'September', 'October', 'November', 'December'];
+                document.getElementById('current-month').textContent = monthNames[selectedMonth];
+                
+                updateExpenseModal();
+            });
+
+            const searchInput = document.getElementById('expense-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', function(e) {
+                    currentSearchTerm = e.target.value;
+                    updateExpenseModal();
+                });
+            }
+
+            const categoryFilter = document.getElementById('category-filter');
+            if (categoryFilter) {
+                categoryFilter.addEventListener('change', function(e) {
+                    currentFilter = e.target.value;
+                    updateExpenseModal();
+                });
+            }
+
+            // ==================== 3D SCENE CODE ====================
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x09090b, 0.035);
+            const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 18);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+            const systemsGroup = new THREE.Group();
+            systemsGroup.position.x = 4.0;
+            scene.add(systemsGroup);
+            const geometry = new THREE.IcosahedronGeometry(4.0, 35);
+            const uniforms = {
+                uTime: { value: 0 },
+                uDistortion: { value: 0.6 },
+                uSize: { value: 1.5 },
+                uColor: { value: new THREE.Color('#10b981') },
+                uOpacity: { value: 0.8 },
+                uMouse: { value: new THREE.Vector2(0, 0) }
+            };
+            window.uniforms = uniforms;
+            
+            const material = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+                uniforms: uniforms,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const particles = new THREE.Points(geometry, material);
+            systemsGroup.add(particles);
+            const lineGroup = new THREE.Group();
+            systemsGroup.add(lineGroup);
+
+            function createTechOrbit(radius, rotation) {
+                const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, 2 * Math.PI, false, 0);
+                const points = curve.getPoints(128);
+                const geo = new THREE.BufferGeometry().setFromPoints(points);
+                const mat = new THREE.LineBasicMaterial({ color: 0x3f3f46, transparent: true, opacity: 0.5 });
+                const orbit = new THREE.Line(geo, mat);
+                orbit.rotation.x = rotation.x;
+                orbit.rotation.y = rotation.y;
+                lineGroup.add(orbit);
+                return orbit;
+            }
+
+            const orbits = [
+                createTechOrbit(5.5, { x: Math.PI / 2, y: 0 }),
+                createTechOrbit(5.2, { x: Math.PI / 3, y: Math.PI / 6 }),
+                createTechOrbit(6.0, { x: Math.PI / 1.8, y: Math.PI / 4 })
+            ];
+
+            let time = 0, speed = 0.1, mouseX = 0, mouseY = 0;
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+                mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+                uniforms.uMouse.value.x += (mouseX - uniforms.uMouse.value.x) * 0.05;
+                uniforms.uMouse.value.y += (mouseY - uniforms.uMouse.value.y) * 0.05;
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                adjustLayout();
+            });
+
+            function adjustLayout() {
+                if (window.innerWidth < 1024) {
+                    systemsGroup.position.set(0, 1.5, -5);
+                    systemsGroup.scale.set(0.8, 0.8, 0.8);
+                } else {
+                    systemsGroup.position.set(4.5, 0, 0);
+                    systemsGroup.scale.set(1, 1, 1);
+                }
+            }
+            adjustLayout();
+
+            function animate() {
+                requestAnimationFrame(animate);
+                time += 0.01 + (speed * 0.05);
+                systemsGroup.rotation.y = time * 0.08;
+                systemsGroup.rotation.z = Math.sin(time * 0.1) * 0.05;
+                lineGroup.rotation.x = Math.sin(time * 0.05) * 0.2;
+                orbits.forEach((orbit, i) => {
+                    orbit.rotation.z += 0.003 * (i + 1);
+                });
+                camera.position.x += (mouseX * 0.5 - camera.position.x) * 0.05;
+                camera.position.y += (mouseY * 0.5 - camera.position.y) * 0.05;
+                camera.lookAt(0, 0, 0);
+                uniforms.uTime.value = time;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Initialize Lucide icons
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
