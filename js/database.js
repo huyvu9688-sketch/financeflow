@@ -17,7 +17,7 @@ export const Database = {
             let budget = null;
             let currency = null;
             let sinkingFunds = [];
-            let fundAllocations = {}; // ✅ ADD THIS
+            let fundAllocations = {};
             
             const userDoc = await getDoc(doc(db, 'users', userId));
             if (userDoc.exists()) {
@@ -25,7 +25,7 @@ export const Database = {
                 budget = data.budget;
                 currency = data.currency;
                 sinkingFunds = data.sinkingFunds || [];
-                fundAllocations = data.fundAllocations || {}; // ✅ ADD THIS
+                fundAllocations = data.fundAllocations || {};
             }
 
             return { 
@@ -33,7 +33,7 @@ export const Database = {
                 budget, 
                 currency, 
                 sinkingFunds,
-                fundAllocations // ✅ ADD THIS
+                fundAllocations
             };
         } catch (error) {
             console.error('Load error:', error);
@@ -51,18 +51,19 @@ export const Database = {
         return docRef.id;
     },
 
-    async updateExpense(id, updates) {
-        await updateDoc(doc(db, 'expenses', id), { 
+    // ✅ FIXED - Added userId parameter (not used but matches the call signature)
+    async updateExpense(userId, expenseId, updates) {
+        await updateDoc(doc(db, 'expenses', expenseId), { 
             ...updates, 
             updatedAt: new Date() 
         });
     },
 
-    async deleteExpense(id) {
-        await deleteDoc(doc(db, 'expenses', id));
+    // ✅ FIXED - Added userId parameter (not used but matches the call signature)
+    async deleteExpense(userId, expenseId) {
+        await deleteDoc(doc(db, 'expenses', expenseId));
     },
 
-    // ✅ UPDATED to handle sinking funds AND fund allocations
     async saveBudget(userId, budget, currency, sinkingFunds = null, fundAllocations = null) {
         const dataToSave = {
             budget: budget,
@@ -70,12 +71,10 @@ export const Database = {
             updatedAt: new Date()
         };
         
-        // Only merge sinking funds if they are explicitly passed
         if (sinkingFunds !== null) {
             dataToSave.sinkingFunds = sinkingFunds;
         }
 
-        // ✅ ADD THIS - Only merge fund allocations if they are explicitly passed
         if (fundAllocations !== null) {
             dataToSave.fundAllocations = fundAllocations;
         }
