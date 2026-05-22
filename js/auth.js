@@ -9,10 +9,39 @@ import {
     updateProfile 
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
+import { getFromLocalStorage, saveToLocalStorage } from './utils.js';
+import { 
+    showErrorToast, 
+    showConfirm, 
+    showLoading, 
+    hideLoading 
+} from './notifications.js';
+
+// --- Helper: Parse Firebase Errors ---
+function getAuthErrorMessage(error) {
+    switch (error.code) {
+        case 'auth/invalid-credential': 
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+            return 'Invalid email or password.';
+        case 'auth/email-already-in-use': 
+            return 'This email is already registered. Please sign in.';
+        case 'auth/weak-password': 
+            return 'Password should be at least 6 characters.';
+        case 'auth/network-request-failed': 
+            return 'Network error. Please check your connection.';
+        case 'auth/popup-closed-by-user': 
+            return 'Sign-in popup was closed.';
+        case 'auth/too-many-requests':
+            return 'Too many attempts. Please try again later.';
+        default: 
+            return error.message || 'Authentication failed. Please try again.';
+    }
+}
+
 // --- Account Local Storage Management ---
 function getStoredAccounts() {
-    const accounts = localStorage.getItem('financeflow_accounts');
-    return accounts ? JSON.parse(accounts) : [];
+    return getFromLocalStorage('financeflow_accounts', []);
 }
 
 function saveAccount(user) {
@@ -33,7 +62,7 @@ function saveAccount(user) {
         accounts.push(accountData);
     }
     
-    localStorage.setItem('financeflow_accounts', JSON.stringify(accounts));
+    saveToLocalStorage('financeflow_accounts', accounts);
 }
 
 export function updateAccountUI(user) {
@@ -108,6 +137,7 @@ export function setupAuth(callbacks) {
     
     const handleGoogleAuth = async () => {
         try {
+            showLoading('Connecting to Google...');
             const provider = new GoogleAuthProvider();
             
             // Force Google to show the account selection screen every time
@@ -120,10 +150,11 @@ export function setupAuth(callbacks) {
             loginModal.classList.remove('active');
             signupModal.classList.remove('active');
         } catch (error) {
-            // Ignore the error if the user just closed the popup intentionally
             if (error.code !== 'auth/popup-closed-by-user') {
-                alert('Google Auth failed: ' + error.message);
+                showErrorToast(getAuthErrorMessage(error));
             }
+        } finally {
+            hideLoading();
         }
     };
 
@@ -136,12 +167,19 @@ export function setupAuth(callbacks) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
+            const passwordInput = document.getElementById('login-password');
+            
             try {
-                await signInWithEmailAndPassword(auth, email, password);
+                showLoading('Signing in...');
+                await signInWithEmailAndPassword(auth, email, passwordInput.value);
                 loginModal.classList.remove('active');
+                loginForm.reset();
             } catch (error) {
-                alert('Login failed: Invalid email or password.');
+                showErrorToast(getAuthErrorMessage(error));
+                passwordInput.value = ''; // Clear password on failure
+                passwordInput.focus();
+            } finally {
+                hideLoading();
             }
         });
     }
@@ -153,13 +191,20 @@ export function setupAuth(callbacks) {
             e.preventDefault();
             const name = document.getElementById('signup-name').value;
             const email = document.getElementById('signup-email').value;
-            const password = document.getElementById('signup-password').value;
+            const passwordInput = document.getElementById('signup-password');
+            
             try {
-                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                showLoading('Creating your account...');
+                const cred = await createUserWithEmailAndPassword(auth, email, passwordInput.value);
                 await updateProfile(cred.user, { displayName: name });
                 signupModal.classList.remove('active');
+                signupForm.reset();
             } catch (error) {
-                alert('Signup failed: ' + error.message);
+                showErrorToast(getAuthErrorMessage(error));
+                passwordInput.value = ''; // Clear password on failure
+                passwordInput.focus();
+            } finally {
+                hideLoading();
             }
         });
     }
@@ -169,10 +214,21 @@ export function setupAuth(callbacks) {
     const settingsLogoutBtn = document.getElementById('settings-logout-btn');
     
     const handleLogout = async () => {
-        if (confirm('Are you sure you want to logout?')) {
+        const confirmed = await showConfirm(
+            'Are you sure you want to log out? Your data will safely remain in the cloud.', 
+            'Log Out'
+        );
+        
+        if (confirmed) {
+            showLoading('Logging out...');
             await signOut(auth);
             loginModal.classList.remove('active');
-            setTimeout(() => location.reload(), 100);
+            
+            // Wait a brief moment for Firebase to clear local state, then reload
+            setTimeout(() => {
+                hideLoading();
+                location.reload();
+            }, 500);
         }
     };
 
