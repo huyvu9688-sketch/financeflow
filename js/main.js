@@ -3,96 +3,98 @@ import { Database } from './database.js';
 import { init3DBackground } from './background-3d.js';
 import { ExpenseTracker } from './expense-tracker.js';
 import { BudgetPlanner } from './budget-planner.js';
+import { db } from './firebase-config.js';
+import { doc, getDoc, setDoc, deleteField } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getCategoryLabel, getCategoryLabels, getCategoryOptions } from './constants.js';
+import { 
+    showSync, 
+    hideSync, 
+    formatNumber, 
+    formatCurrency, 
+    convertCurrency,
+    getCurrentMonthKey as utilGetCurrentMonthKey,
+    formatMonthLabel
+} from './utils.js';
+import { 
+    showToast, 
+    showSuccessToast, 
+    showErrorToast, 
+    showWarningToast,
+    showInfoToast,
+    showConfirm,
+    showLoading,
+    hideLoading
+} from './notifications.js';
+
+// Make convertCurrency globally available for budget-planner
+if (typeof window !== 'undefined') {
+    window.convertCurrency = convertCurrency;
+}
 
 // --- STATE ---
 let currentUser = null;
 let currentCurrency = localStorage.getItem('currency') || 'USD';
-const EXCHANGE_RATE = 25450;
 let expensesCache = [];
+let monthlyBudgetsCache = {};
+let currentBudgetMonth = null;
 
-// --- UTILS ---
-function showSync() { 
-    const i = document.getElementById('sync-indicator'); 
-    if(i) i.classList.add('show'); 
-}
-
-function hideSync() { 
-    const i = document.getElementById('sync-indicator'); 
-    if(i) i.classList.remove('show'); 
-}
-
-function formatNumber(num) { 
-    return currentCurrency === 'VND' 
-        ? new Intl.NumberFormat('vi-VN').format(num) 
-        : new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num); 
-}
-
-function formatCurrency(amount) { 
-    return currentCurrency === 'VND' 
-        ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount) 
-        : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount); 
+// ✅ Use utility function with local state
+function getCurrentMonthKey() {
+    if (!currentBudgetMonth) {
+        currentBudgetMonth = utilGetCurrentMonthKey();
+    }
+    return currentBudgetMonth;
 }
 
 function getUserIncome() {
-    return currentUser 
-        ? (parseFloat(localStorage.getItem(`income_${currentUser.uid}`)) || 5200) 
-        : (parseFloat(localStorage.getItem('income')) || 5200);
-}
-
-function convertCurrency(amount, fromCurrency, toCurrency) {
-    if (fromCurrency === toCurrency) return amount;
-    
-    if (fromCurrency === 'USD' && toCurrency === 'VND') {
-        return amount * EXCHANGE_RATE;
-    } else if (fromCurrency === 'VND' && toCurrency === 'USD') {
-        return amount / EXCHANGE_RATE;
+    if (!currentUser) {
+        return parseFloat(localStorage.getItem('income')) || 5200;
     }
-    return amount;
+    
+    const currentMonth = getCurrentMonthKey();
+    const monthBudget = monthlyBudgetsCache[currentMonth];
+    
+    if (monthBudget && monthBudget.income) {
+        return monthBudget.income;
+    }
+    
+    return parseFloat(localStorage.getItem(`income_${currentUser.uid}`)) || 5200;
 }
 
-function getCategoryLabel(cat) {
-    const map = {
-        'housing': 'Housing',
-        'food': 'Food & Dining',
-        'transportation': 'Transportation',
-        'entertainment': 'Entertainment',
-        'healthcare': 'Healthcare',
-        'shopping': 'Shopping',
-        'utilities': 'Utilities',
-        'other': 'Other'
-    };
-    return map[cat] || 'Other';
-}
-
-// ✅ NEW: Fixed color mapping per category (matches donut chart pastel colors)
-function getCategoryColor(category) {
-    const colorMap = {
-        'housing': 'hsl(0, 70%, 75%)',      // Red pastel
-        'food': 'hsl(51, 70%, 75%)',        // Yellow pastel
-        'transportation': 'hsl(102, 70%, 75%)', // Green pastel
-        'entertainment': 'hsl(153, 70%, 75%)',  // Cyan pastel
-        'healthcare': 'hsl(204, 70%, 75%)',     // Blue pastel
-        'shopping': 'hsl(255, 70%, 75%)',       // Purple pastel
-        'utilities': 'hsl(306, 70%, 75%)',      // Magenta pastel
-        'other': 'hsl(0, 0%, 60%)'              // Gray
+// ✅ Load and display a specific month's budget
+function loadMonthBudget(monthKey) {
+    const monthBudget = monthlyBudgetsCache[monthKey] || {
+        needs: 50,
+        wants: 30,
+        savings: 20,
+        income: 5200,
+        currency: currentCurrency
     };
     
-    return colorMap[category.toLowerCase()] || 'hsl(0, 0%, 60%)';
-}
-
-// ✅ NEW: Reverse mapping helper
-function getCategoryKey(displayLabel) {
-    const reverseMap = {
-        'Housing': 'housing',
-        'Food & Dining': 'food',
-        'Transportation': 'transportation',
-        'Entertainment': 'entertainment',
-        'Healthcare': 'healthcare',
-        'Shopping': 'shopping',
-        'Utilities': 'utilities',
-        'Other': 'other'
-    };
-    return reverseMap[displayLabel] || 'other';
+    const needsInput = document.getElementById('input-needs');
+    const wantsInput = document.getElementById('input-wants');
+    const savingsInput = document.getElementById('input-savings');
+    const incomeInput = document.getElementById('income-input');
+    
+    if(needsInput) needsInput.value = monthBudget.needs;
+    if(wantsInput) wantsInput.value = monthBudget.wants;
+    if(savingsInput) savingsInput.value = monthBudget.savings;
+    
+    if(incomeInput) {
+        incomeInput.dataset.value = monthBudget.income;
+        incomeInput.dataset.currency = monthBudget.currency || currentCurrency;
+        
+        let displayIncome = monthBudget.income;
+        const storedCurrency = monthBudget.currency || currentCurrency;
+        if (storedCurrency !== currentCurrency) {
+            displayIncome = convertCurrency(displayIncome, storedCurrency, currentCurrency);
+        }
+        
+        incomeInput.value = formatNumber(displayIncome, currentCurrency);
+    }
+    
+    currentBudgetMonth = monthKey;
+    updateBudgetAllocation();
 }
 
 // --- DATA LOGIC ---
@@ -102,25 +104,104 @@ async function loadAndRenderData() {
     try {
         const data = await Database.loadUserData(currentUser.uid);
         expensesCache = data.expenses || [];
+        monthlyBudgetsCache = data.monthlyBudgets || {};
+        
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        const currentMigrationVersion = userDoc.exists() ? (userDoc.data().migrationVersion || 0) : 0;
+        
+        // ✅ MIGRATION VERSION 1: Old budget → monthlyBudgets
+        if (currentMigrationVersion < 1) {
+            if (userDoc.exists() && userDoc.data().budget) {
+                const oldBudget = userDoc.data().budget;
+                const currentMonth = getCurrentMonthKey();
+                
+                monthlyBudgetsCache[currentMonth] = {
+                    ...oldBudget,
+                    currency: data.currency || 'USD'
+                };
+                
+                console.log('✅ Migration v1: Converting old budget format...');
+                
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    monthlyBudgets: { [currentMonth]: monthlyBudgetsCache[currentMonth] },
+                    budget: deleteField(),
+                    migrationVersion: 1
+                }, { merge: true });
+                
+                showSuccessToast('Budget data updated to new format');
+            } else {
+                // No old budget to migrate, just mark as migrated
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    migrationVersion: 1
+                }, { merge: true });
+            }
+        }
+        
+        // ✅ MIGRATION VERSION 2: Add currency field to expenses
+        if (currentMigrationVersion < 2) {
+            const userCurrency = data.currency || 'USD';
+            let needsExpenseMigration = false;
+            
+            expensesCache.forEach(exp => {
+                if (!exp.currency) {
+                    exp.currency = userCurrency;
+                    needsExpenseMigration = true;
+                }
+            });
+            
+            if (needsExpenseMigration) {
+                console.log('✅ Migration v2: Adding currency to expenses...');
+                
+                const migratePromises = expensesCache
+                    .filter(exp => !exp.migrated)
+                    .map(exp => {
+                        exp.migrated = true;
+                        return Database.updateExpense(currentUser.uid, exp.id, { 
+                            currency: exp.currency 
+                        });
+                    });
+                
+                await Promise.all(migratePromises);
+                
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    migrationVersion: 2
+                }, { merge: true });
+                
+                showInfoToast('Expense data updated');
+            } else {
+                // No expenses to migrate, just mark as migrated
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    migrationVersion: 2
+                }, { merge: true });
+            }
+        }
+        
         localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expensesCache));
         
-        if (data.budget) {
-            const needsInput = document.getElementById('input-needs');
-            const wantsInput = document.getElementById('input-wants');
-            const savingsInput = document.getElementById('input-savings');
-            
-            if(needsInput) needsInput.value = data.budget.needs || 50;
-            if(wantsInput) wantsInput.value = data.budget.wants || 30;
-            if(savingsInput) savingsInput.value = data.budget.savings || 20;
-            
-            const income = data.budget.income || 5200;
-            const incomeInput = document.getElementById('income-input');
-            if(incomeInput) {
-                incomeInput.dataset.value = income;
-                incomeInput.value = formatNumber(income);
-            }
-            
-            localStorage.setItem(`income_${currentUser.uid}`, income);
+        // Load the current month's budget
+        const currentMonth = getCurrentMonthKey();
+        const currentMonthBudget = monthlyBudgetsCache[currentMonth] || {
+            needs: 50,
+            wants: 30,
+            savings: 20,
+            income: 5200,
+            currency: data.currency || 'USD'
+        };
+        
+        // Update UI with current month's budget
+        const needsInput = document.getElementById('input-needs');
+        const wantsInput = document.getElementById('input-wants');
+        const savingsInput = document.getElementById('input-savings');
+        const incomeInput = document.getElementById('income-input');
+        
+        if(needsInput) needsInput.value = currentMonthBudget.needs;
+        if(wantsInput) wantsInput.value = currentMonthBudget.wants;
+        if(savingsInput) savingsInput.value = currentMonthBudget.savings;
+        
+        if(incomeInput) {
+            incomeInput.dataset.value = currentMonthBudget.income;
+            incomeInput.dataset.currency = currentMonthBudget.currency || data.currency || 'USD';
+            incomeInput.value = formatNumber(currentMonthBudget.income, currentCurrency);
         }
 
         if (data.currency) {
@@ -143,6 +224,7 @@ async function loadAndRenderData() {
         
     } catch (e) {
         console.error("Error loading user data:", e);
+        showErrorToast('Failed to load your data. Please refresh the page.');
     } finally {
         hideSync();
     }
@@ -197,17 +279,36 @@ function updateBudgetAllocation() {
     const savings = parseInt(savingsInput.value);
     const total = needs + wants + savings;
     
-    document.getElementById('val-needs').value = needs + '%';
-    document.getElementById('val-wants').value = wants + '%';
-    document.getElementById('val-savings').value = savings + '%';
+    // ✅ AUTO-ADJUST: If total isn't 100%, scale proportionally
+    if (total !== 100 && total > 0) {
+        const scale = 100 / total;
+        const adjustedNeeds = Math.round(needs * scale);
+        const adjustedWants = Math.round(wants * scale);
+        const adjustedSavings = 100 - adjustedNeeds - adjustedWants; // Ensures exactly 100%
+        
+        needsInput.value = adjustedNeeds;
+        wantsInput.value = adjustedWants;
+        savingsInput.value = adjustedSavings;
+        
+        // Update text inputs
+        document.getElementById('val-needs').value = adjustedNeeds + '%';
+        document.getElementById('val-wants').value = adjustedWants + '%';
+        document.getElementById('val-savings').value = adjustedSavings + '%';
+    } else {
+        // No adjustment needed
+        document.getElementById('val-needs').value = needs + '%';
+        document.getElementById('val-wants').value = wants + '%';
+        document.getElementById('val-savings').value = savings + '%';
+    }
     
     const totalPercentage = document.getElementById('total-percentage');
     if(totalPercentage) {
-        totalPercentage.textContent = total + '%';
-        totalPercentage.style.color = total === 100 ? '#10b981' : (total < 100 ? '#f59e0b' : '#ef4444');
+        const finalTotal = parseInt(needsInput.value) + parseInt(wantsInput.value) + parseInt(savingsInput.value);
+        totalPercentage.textContent = finalTotal + '%';
+        totalPercentage.style.color = finalTotal === 100 ? '#10b981' : '#f59e0b';
     }
     
-    if (window.uniforms) window.uniforms.uDistortion.value = needs / 100;
+    if (window.uniforms) window.uniforms.uDistortion.value = parseInt(needsInput.value) / 100;
     
     const incomeInput = document.getElementById('income-input');
     let baseIncome = parseFloat(incomeInput.dataset.value) || 0;
@@ -222,14 +323,26 @@ function updateBudgetAllocation() {
     const aWants = document.getElementById('amount-wants');
     const aSavings = document.getElementById('amount-savings');
     
-    if(aNeeds) aNeeds.textContent = formatCurrency(displayIncome * needs / 100);
-    if(aWants) aWants.textContent = formatCurrency(displayIncome * wants / 100);
-    if(aSavings) aSavings.textContent = formatCurrency(displayIncome * savings / 100);
+    if(aNeeds) aNeeds.textContent = formatCurrency(displayIncome * parseInt(needsInput.value) / 100, currentCurrency);
+    if(aWants) aWants.textContent = formatCurrency(displayIncome * parseInt(wantsInput.value) / 100, currentCurrency);
+    if(aSavings) aSavings.textContent = formatCurrency(displayIncome * parseInt(savingsInput.value) / 100, currentCurrency);
 
-    if (currentUser) {
-        Database.saveBudget(currentUser.uid, { needs, wants, savings, income: baseIncome }, storedCurrency);
+    // Save to Firebase if total is 100%
+    if (currentUser && parseInt(needsInput.value) + parseInt(wantsInput.value) + parseInt(savingsInput.value) === 100) {
+        const currentMonth = getCurrentMonthKey();
+        const budget = { 
+            needs: parseInt(needsInput.value), 
+            wants: parseInt(wantsInput.value), 
+            savings: parseInt(savingsInput.value), 
+            income: baseIncome,
+            currency: storedCurrency
+        };
+        
+        monthlyBudgetsCache[currentMonth] = budget;
+        Database.saveMonthlyBudget(currentUser.uid, currentMonth, budget, storedCurrency);
     }
     
+    // Update Budget Planner savings box
     if (BudgetPlanner.updateSavingsGoalBox) {
         BudgetPlanner.updateSavingsGoalBox();
     }
@@ -237,7 +350,7 @@ function updateBudgetAllocation() {
 
 // --- MONTHLY CHART FUNCTIONS ---
 function calculateMonthlyData(expenses, year) {
-    const categories = ['Housing', 'Food & Dining', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Utilities', 'Other'];
+    const categories = getCategoryLabels();
     
     const data = {};
     categories.forEach(cat => {
@@ -253,13 +366,17 @@ function calculateMonthlyData(expenses, year) {
         
         if (data[category]) {
             let amount = exp.amount;
-            const expenseCurrency = exp.currency || 'USD';
+            const expenseCurrency = exp.currency || currentCurrency || 'USD';
             
             if (expenseCurrency !== currentCurrency) {
                 amount = convertCurrency(amount, expenseCurrency, currentCurrency);
             }
             
-            data[category][monthIndex] += amount;
+            if (!isNaN(amount) && amount > 0) {
+                data[category][monthIndex] += amount;
+            } else {
+                console.warn('Invalid expense amount:', exp);
+            }
         }
     });
     
@@ -273,25 +390,10 @@ function updateMonthlyChart(year = null) {
     
     const chartData = calculateMonthlyData(expensesCache, selectedYear);
     
-    // ✅ Calculate monthly income data
     const getMonthlyIncomeData = () => {
-        const incomeInput = document.getElementById('income-input');
-        const baseIncome = incomeInput ? (parseFloat(incomeInput.dataset.value) || 5200) : 5200;
-        const storedCurrency = incomeInput ? (incomeInput.dataset.currency || 'USD') : 'USD';
-        
-        let displayIncome = baseIncome;
-        if (storedCurrency !== currentCurrency) {
-            if (storedCurrency === 'USD' && currentCurrency === 'VND') {
-                displayIncome = baseIncome * EXCHANGE_RATE;
-            } else if (storedCurrency === 'VND' && currentCurrency === 'USD') {
-                displayIncome = baseIncome / EXCHANGE_RATE;
-            }
-        }
-        
-        const incomeData = [];
+        const incomeData = Array(12).fill(null);
         
         for (let month = 0; month < 12; month++) {
-            // Check if this month has any expense data
             let hasData = false;
             Object.values(chartData).forEach(monthlyData => {
                 if (monthlyData[month] > 0) {
@@ -299,24 +401,31 @@ function updateMonthlyChart(year = null) {
                 }
             });
             
-            // ✅ ONLY show income if the month actually has expense data
-            // (Removes the past/future month logic so past empty months are also hidden)
             if (hasData) {
-                incomeData.push(displayIncome);
-            } else {
-                incomeData.push(null); // Creates a gap / hides the dot
+                const monthKey = `${selectedYear}-${String(month + 1).padStart(2, '0')}`;
+                const monthBudget = monthlyBudgetsCache[monthKey];
+                
+                if (monthBudget && monthBudget.income) {
+                    let displayIncome = monthBudget.income;
+                    const storedCurrency = monthBudget.currency || 'USD';
+                    
+                    if (storedCurrency !== currentCurrency) {
+                        displayIncome = convertCurrency(displayIncome, storedCurrency, currentCurrency);
+                    }
+                    
+                    incomeData[month] = displayIncome;
+                }
             }
         }
         
         return incomeData;
     };
-    
+
     const monthlyIncomeData = getMonthlyIncomeData();
     
-    // Calculate yearly totals for ordering
     const categoryYearlyTotals = {};
     window.monthlyStackedChart.data.datasets.forEach(dataset => {
-        if (dataset.label === 'Monthly Income') return; // Skip income line
+        if (dataset.label === 'Monthly Income') return;
         
         const total = chartData[dataset.label] 
             ? chartData[dataset.label].reduce((sum, val) => sum + val, 0)
@@ -324,30 +433,23 @@ function updateMonthlyChart(year = null) {
         categoryYearlyTotals[dataset.label] = total;
     });
     
-    // Sort to get order (highest first = bottom of visual stack)
     const sortedLabels = Object.keys(categoryYearlyTotals)
         .sort((a, b) => categoryYearlyTotals[b] - categoryYearlyTotals[a]);
     
-    // Update data and set order property
     window.monthlyStackedChart.data.datasets.forEach((dataset) => {
-        // Update income line
         if (dataset.label === 'Monthly Income') {
-            dataset.data = monthlyIncomeData;
-            dataset.order = 1; // Always on top
+            dataset.data = [...monthlyIncomeData];  // ✅ FIX 1: Clone array
+            dataset.order = 1;
             return;
         }
         
-        // Update expense bar data
         if (chartData[dataset.label]) {
-            dataset.data = chartData[dataset.label];
+            dataset.data = [...chartData[dataset.label]];  // ✅ FIX 1: Clone array
         } else {
             dataset.data = Array(12).fill(0);
         }
         
-        // Set drawing order
-        dataset.order = sortedLabels.indexOf(dataset.label) + 2; // +2 to keep bars behind line
-        
-        // Ensure border properties are maintained
+        dataset.order = sortedLabels.indexOf(dataset.label) + 2;
         dataset.borderColor = '#000000';
         dataset.borderWidth = 1.5;
     });
@@ -369,9 +471,7 @@ function updateMonthlyChart(year = null) {
     };
     
     window.currentCurrency = currentCurrency;
-    
-    window.monthlyStackedChart.update('none');
-    
+    window.monthlyStackedChart.update('active');  // ✅ FIX 2: Changed from 'none' to 'active'
     updateChartStats(chartData, selectedYear);
 }
 
@@ -383,7 +483,7 @@ function updateChartStats(chartData, year) {
     
     const yearTotalEl = document.getElementById('year-total');
     const yearTotalLabel = document.getElementById('year-total-label');
-    if(yearTotalEl) yearTotalEl.textContent = formatCurrency(yearTotal);
+    if(yearTotalEl) yearTotalEl.textContent = formatCurrency(yearTotal, currentCurrency);
     if(yearTotalLabel) yearTotalLabel.textContent = `Total spending in ${year}`;
     
     let topCategory = '';
@@ -403,10 +503,10 @@ function updateChartStats(chartData, year) {
     if(topCatEl) topCatEl.textContent = topCategory || 'N/A';
     if(topCatAmountEl && yearTotal > 0) {
         const percent = Math.round((topAmount / yearTotal) * 100);
-        topCatAmountEl.textContent = `${formatCurrency(topAmount)} (${percent}%)`;
+        topCatAmountEl.textContent = `${formatCurrency(topAmount, currentCurrency)} (${percent}%)`;
         if(topCatBarEl) topCatBarEl.style.width = `${percent}%`;
     } else if(topCatAmountEl) {
-        topCatAmountEl.textContent = `${formatCurrency(0)} (0%)`;
+        topCatAmountEl.textContent = `${formatCurrency(0, currentCurrency)} (0%)`;
         if(topCatBarEl) topCatBarEl.style.width = '0%';
     }
     
@@ -423,9 +523,9 @@ function updateChartStats(chartData, year) {
         const lowestAmountEl = document.getElementById('lowest-amount');
         
         if(highestMonthEl) highestMonthEl.textContent = 'N/A';
-        if(highestAmountEl) highestAmountEl.textContent = formatCurrency(0);
+        if(highestAmountEl) highestAmountEl.textContent = formatCurrency(0, currentCurrency);
         if(lowestMonthEl) lowestMonthEl.textContent = 'N/A';
-        if(lowestAmountEl) lowestAmountEl.textContent = formatCurrency(0);
+        if(lowestAmountEl) lowestAmountEl.textContent = formatCurrency(0, currentCurrency);
     } else {
         const maxMonth = monthlyTotals.indexOf(Math.max(...monthlyTotals));
         const minMonth = monthlyTotals.indexOf(Math.min(...nonZeroMonths));
@@ -438,9 +538,9 @@ function updateChartStats(chartData, year) {
         const lowestAmountEl = document.getElementById('lowest-amount');
         
         if(highestMonthEl) highestMonthEl.textContent = months[maxMonth];
-        if(highestAmountEl) highestAmountEl.textContent = formatCurrency(monthlyTotals[maxMonth]);
+        if(highestAmountEl) highestAmountEl.textContent = formatCurrency(monthlyTotals[maxMonth], currentCurrency);
         if(lowestMonthEl) lowestMonthEl.textContent = months[minMonth];
-        if(lowestAmountEl) lowestAmountEl.textContent = formatCurrency(monthlyTotals[minMonth]);
+        if(lowestAmountEl) lowestAmountEl.textContent = formatCurrency(monthlyTotals[minMonth], currentCurrency);
     }
     
     const annualBudget = getUserIncome() * 12;
@@ -452,9 +552,9 @@ function updateChartStats(chartData, year) {
     const budgetRemainingEl = document.getElementById('budget-remaining');
     const budgetProgressBar = document.getElementById('budget-progress-bar');
     
-    if(runningTotalEl) runningTotalEl.textContent = formatCurrency(runningTotal);
-    if(annualBudgetEl) annualBudgetEl.textContent = formatCurrency(annualBudget);
-    if(budgetRemainingEl) budgetRemainingEl.textContent = formatCurrency(Math.max(0, remaining));
+    if(runningTotalEl) runningTotalEl.textContent = formatCurrency(runningTotal, currentCurrency);
+    if(annualBudgetEl) annualBudgetEl.textContent = formatCurrency(annualBudget, currentCurrency);
+    if(budgetRemainingEl) budgetRemainingEl.textContent = formatCurrency(Math.max(0, remaining), currentCurrency);
     if(budgetProgressBar && annualBudget > 0) {
         const percent = Math.min(100, Math.round((runningTotal / annualBudget) * 100));
         budgetProgressBar.style.width = `${percent}%`;
@@ -473,25 +573,43 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         getIncome: getUserIncome,
         getCurrency: () => currentCurrency,
-        formatCurrency: formatCurrency,
-        formatNumber: formatNumber,
+        formatCurrency: (amount) => formatCurrency(amount, currentCurrency),
+        formatNumber: (num) => formatNumber(num, currentCurrency),
         showSync: showSync,
-        hideSync: hideSync
+        hideSync: hideSync,
+        showToast: showToast,
+        showSuccessToast: showSuccessToast,
+        showErrorToast: showErrorToast,
+        showWarningToast: showWarningToast,
+        showConfirm: showConfirm
     };
 
     try { ExpenseTracker.init(coreAPI); } catch(e) { console.error("ExpenseTracker init failed", e); }
     try { BudgetPlanner.init(coreAPI); } catch(e) { console.error("BudgetPlanner init failed", e); }
     try { init3DBackground(); } catch(e) { console.error("3D init failed", e); }
 
+    // ✅ Populate category dropdown
+    const expenseCategorySelect = document.getElementById('expense-category');
+    if (expenseCategorySelect) {
+        expenseCategorySelect.innerHTML = `
+            <option value="" disabled selected>Select</option>
+            ${getCategoryOptions()}
+        `;
+    }
+
     setupAuth({
         onLogin: (user) => { 
             currentUser = user; 
             loadAndRenderData();
             updateSettingsUI();
+            showSuccessToast(`Welcome back, ${user.displayName || user.email.split('@')[0]}!`);
         },
         onLogout: () => { 
             currentUser = null; 
             expensesCache = []; 
+            monthlyBudgetsCache = {};
+            currentBudgetMonth = null;
+            
             if (ExpenseTracker.update) ExpenseTracker.update(); 
             
             if (BudgetPlanner.setFunds) BudgetPlanner.setFunds([]);
@@ -503,6 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             updateMonthlyChart();
+            showInfoToast('You have been logged out');
         }
     });
 
@@ -510,29 +629,67 @@ document.addEventListener('DOMContentLoaded', () => {
     if(expForm) {
         expForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            if(!currentUser) return alert('Please login to save expenses');
+            
+            if(!currentUser) {
+                showErrorToast('Please login to save expenses');
+                return;
+            }
             
             const amount = parseFloat(document.getElementById('expense-amount').value);
+            const categorySelect = document.getElementById('expense-category');
+            const nameInput = document.getElementById('expense-name');
+            
+            if (!nameInput.value.trim()) {
+                showWarningToast('Please enter an expense name');
+                nameInput.focus();
+                return;
+            }
+            
+            if (!categorySelect.value) {
+                showWarningToast('Please select a category');
+                categorySelect.focus();
+                return;
+            }
+            
+            if (isNaN(amount) || amount <= 0) {
+                showWarningToast('Please enter a valid amount');
+                document.getElementById('expense-amount').focus();
+                return;
+            }
             
             const expense = {
                 date: document.getElementById('expense-date').value,
-                name: document.getElementById('expense-name').value,
-                category: document.getElementById('expense-category').value,
+                name: nameInput.value.trim(),
+                category: categorySelect.value,
                 amount: amount,
                 currency: currentCurrency
             };
             
-            showSync();
-            const id = await Database.saveExpense(currentUser.uid, expense, currentCurrency);
-            expensesCache.unshift({ id, ...expense });
-            localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expensesCache));
-            hideSync();
-            
-            if (ExpenseTracker.update) ExpenseTracker.update();
-            updateMonthlyChart();
-            
-            e.target.reset();
-            document.getElementById('expense-date').valueAsDate = new Date();
+            try {
+                showSync();
+                const id = await Database.saveExpense(currentUser.uid, expense, currentCurrency);
+                expensesCache.unshift({ id, ...expense });
+                localStorage.setItem(`expenses_${currentUser.uid}`, JSON.stringify(expensesCache));
+                hideSync();
+                
+                if (ExpenseTracker.update) ExpenseTracker.update();
+                updateMonthlyChart();
+                
+                // ✅ Update Budget Planner savings box after adding expense
+                if (BudgetPlanner.updateSavingsGoalBox) {
+                    BudgetPlanner.updateSavingsGoalBox();
+                }
+                
+                showSuccessToast(`Added "${expense.name}" - ${formatCurrency(expense.amount, currentCurrency)}`);
+                
+                e.target.reset();
+                document.getElementById('expense-date').valueAsDate = new Date();
+                nameInput.focus();
+            } catch (error) {
+                console.error('Error saving expense:', error);
+                hideSync();
+                showErrorToast('Failed to save expense. Please check your connection and try again.');
+            }
         });
     }
 
@@ -558,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     displayIncome = convertCurrency(baseIncome, storedCurrency, currentCurrency);
                 }
                 
-                incomeInput.value = formatNumber(displayIncome);
+                incomeInput.value = formatNumber(displayIncome, currentCurrency);
             }
             
             updateBudgetAllocation();
@@ -574,6 +731,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const activeFund = document.querySelector('.cf-item.border-emerald-500\\/50');
                 if (activeFund) activeFund.click();
             }
+            
+            showInfoToast(`Currency changed to ${newCur}`);
         });
     });
 
@@ -584,6 +743,37 @@ document.addEventListener('DOMContentLoaded', () => {
             const newCur = e.target.value;
             const currencyBtn = document.querySelector(`.currency-selector[data-currency="${newCur}"]`);
             if(currencyBtn) currencyBtn.click();
+        });
+    }
+    
+    // Setup Budget Month Picker
+    const budgetMonthPicker = document.getElementById('budget-month-picker');
+    const incomeMonthLabel = document.getElementById('current-month');
+    
+    if (budgetMonthPicker) {
+        const currentMonthVal = utilGetCurrentMonthKey();
+        budgetMonthPicker.value = currentMonthVal;
+        currentBudgetMonth = currentMonthVal;
+        
+        if (incomeMonthLabel) {
+            incomeMonthLabel.textContent = formatMonthLabel(currentMonthVal);
+        }
+        
+        budgetMonthPicker.addEventListener('change', (e) => {
+            const selectedMonth = e.target.value;
+            
+            if (incomeMonthLabel) {
+                incomeMonthLabel.textContent = formatMonthLabel(selectedMonth);
+            }
+            
+            loadMonthBudget(selectedMonth);
+            
+            const [pickerYear] = selectedMonth.split('-');
+            const chartYear = document.getElementById('analytics-year-picker')?.value || new Date().getFullYear().toString();
+            
+            if (pickerYear === chartYear) {
+                updateMonthlyChart(chartYear);
+            }
         });
     }
 
@@ -607,19 +797,53 @@ document.addEventListener('DOMContentLoaded', () => {
         incInput.addEventListener('blur', function() {
             let val = parseFloat(this.value) || 0;
             
+            if (val < 0) {
+                showWarningToast('Income cannot be negative');
+                val = 0;
+            }
+            
             this.dataset.value = val;
             this.dataset.currency = currentCurrency;
             
             if(currentUser) {
-                localStorage.setItem(`income_${currentUser.uid}`, val);
-                localStorage.setItem(`income_currency_${currentUser.uid}`, currentCurrency);
+                const currentMonth = getCurrentMonthKey();
+                
+                if (!monthlyBudgetsCache[currentMonth]) {
+                    monthlyBudgetsCache[currentMonth] = {
+                        needs: parseInt(document.getElementById('input-needs').value) || 50,
+                        wants: parseInt(document.getElementById('input-wants').value) || 30,
+                        savings: parseInt(document.getElementById('input-savings').value) || 20,
+                        income: val,
+                        currency: currentCurrency
+                    };
+                } else {
+                    monthlyBudgetsCache[currentMonth].income = val;
+                    monthlyBudgetsCache[currentMonth].currency = currentCurrency;
+                }
+                
+                Database.saveMonthlyBudget(
+                    currentUser.uid, 
+                    currentMonth, 
+                    monthlyBudgetsCache[currentMonth], 
+                    currentCurrency
+                ).then(() => {
+                    showSuccessToast(`Income updated to ${formatCurrency(val, currentCurrency)}`);
+                }).catch(error => {
+                    console.error('Error saving income:', error);
+                    showErrorToast('Failed to save income');
+                });
+            } else {
+                localStorage.setItem(`income`, val);
             }
             
-            this.value = formatNumber(val);
+            this.value = formatNumber(val, currentCurrency);
             updateBudgetAllocation();
-            
-            // ✅ Update chart when income changes
             updateMonthlyChart();
+            
+            // ✅ Update Budget Planner savings box after income change
+            if (BudgetPlanner.updateSavingsGoalBox) {
+                BudgetPlanner.updateSavingsGoalBox();
+            }
         });
         
         const storedCurrency = incInput.dataset.currency || 'USD';
@@ -627,16 +851,56 @@ document.addEventListener('DOMContentLoaded', () => {
         if (storedCurrency !== currentCurrency) {
             displayValue = convertCurrency(displayValue, storedCurrency, currentCurrency);
         }
-        incInput.value = formatNumber(displayValue);
+        incInput.value = formatNumber(displayValue, currentCurrency);
     }
+
+    let budgetSaveTimeout;
 
     ['needs', 'wants', 'savings'].forEach(type => {
         const slider = document.getElementById(`input-${type}`);
         const input = document.getElementById(`val-${type}`);
         if(slider && input) {
             slider.addEventListener('input', () => {
+                const oldValue = slider.value;
                 updateBudgetAllocation();
+                
+                // ✅ Highlight if value was auto-adjusted
+                if (slider.value !== oldValue) {
+                    slider.classList.add('adjusting');
+                    input.classList.add('adjusted');
+                    
+                    setTimeout(() => {
+                        slider.classList.remove('adjusting');
+                        input.classList.remove('adjusted');
+                    }, 600);
+                }
+                
+                clearTimeout(budgetSaveTimeout);
+                budgetSaveTimeout = setTimeout(() => {
+                    if (currentUser) {
+                        const currentMonth = getCurrentMonthKey();
+                        const needs = parseInt(document.getElementById('input-needs').value);
+                        const wants = parseInt(document.getElementById('input-wants').value);
+                        const savings = parseInt(document.getElementById('input-savings').value);
+                        const total = needs + wants + savings;
+                        
+                        if (total === 100) {
+                            const incomeInput = document.getElementById('income-input');
+                            const budget = {
+                                needs,
+                                wants,
+                                savings,
+                                income: parseFloat(incomeInput.dataset.value) || 5200,
+                                currency: incomeInput.dataset.currency || currentCurrency
+                            };
+                            
+                            monthlyBudgetsCache[currentMonth] = budget;
+                            Database.saveMonthlyBudget(currentUser.uid, currentMonth, budget, currentCurrency);
+                        }
+                    }
+                }, 500);
             });
+            
             input.addEventListener('blur', function() {
                 let val = Math.max(0, Math.min(100, parseInt(this.value.replace('%','')) || 0));
                 this.value = val + '%'; 
@@ -649,28 +913,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportBtn = document.getElementById('export-data-btn');
     if(exportBtn) {
         exportBtn.addEventListener('click', () => {
-            if(!currentUser) return alert('Please login first');
+            if(!currentUser) {
+                showErrorToast('Please login first');
+                return;
+            }
             
-            const exportData = {
-                user: currentUser.email,
-                currency: currentCurrency,
-                income: getUserIncome(),
-                expenses: expensesCache,
-                budget: {
-                    needs: parseInt(document.getElementById('input-needs').value),
-                    wants: parseInt(document.getElementById('input-wants').value),
-                    savings: parseInt(document.getElementById('input-savings').value)
-                },
-                exportedAt: new Date().toISOString()
-            };
-            
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `financeflow-export-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            try {
+                const exportData = {
+                    user: currentUser.email,
+                    currency: currentCurrency,
+                    monthlyBudgets: monthlyBudgetsCache,
+                    expenses: expensesCache,
+                    sinkingFunds: BudgetPlanner.getFunds ? BudgetPlanner.getFunds() : [],
+                    fundAllocations: BudgetPlanner.getSimulatedData ? BudgetPlanner.getSimulatedData() : {},
+                    exportedAt: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `financeflow-export-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                showSuccessToast('Data exported successfully');
+            } catch (error) {
+                console.error('Export error:', error);
+                showErrorToast('Failed to export data');
+            }
         });
     }
 
@@ -750,9 +1021,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (e.altKey && e.key.toLowerCase() === 'e') {
             e.preventDefault();
+            
             if (expenseModal && expenseModal.classList.contains('active')) {
                 expenseModal.classList.remove('active');
                 document.body.style.overflow = 'auto';
+                return;
             }
             if (budgetModal && budgetModal.classList.contains('active')) {
                 budgetModal.classList.remove('active');
@@ -761,9 +1034,63 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.budgetChart.destroy();
                     window.budgetChart = null;
                 }
+                return;
             }
+            
             const expName = document.getElementById('expense-name');
             if(expName) expName.focus();
         }
+    });
+
+    // ==========================================
+    // SETTINGS: TOGGLE SWITCHES
+    // ==========================================
+    document.querySelectorAll('.toggle-switch').forEach(toggle => {
+        const settingKey = toggle.dataset.setting;
+        
+        // 1. Load saved state from localStorage
+        if (settingKey) {
+            const savedState = localStorage.getItem(`setting_${settingKey}`);
+            if (savedState !== null) {
+                toggle.dataset.enabled = savedState;
+            }
+        }
+
+        // 2. Function to update the visual appearance
+        const updateVisuals = (element) => {
+            const isEnabled = element.dataset.enabled === 'true';
+            const thumb = element.querySelector('.toggle-thumb');
+            
+            if (isEnabled) {
+                element.classList.add('bg-emerald-500');
+                element.classList.remove('bg-slate-700/50');
+                thumb.style.transform = 'translateX(20px)';
+            } else {
+                element.classList.remove('bg-emerald-500');
+                element.classList.add('bg-slate-700/50');
+                thumb.style.transform = 'translateX(0)';
+            }
+        };
+
+        // Apply initial visual state on load
+        updateVisuals(toggle);
+
+        // 3. Handle click events
+        toggle.addEventListener('click', () => {
+            const isEnabled = toggle.dataset.enabled === 'true';
+            
+            toggle.dataset.enabled = (!isEnabled).toString();
+            updateVisuals(toggle);
+            
+            if (settingKey) {
+                localStorage.setItem(`setting_${settingKey}`, toggle.dataset.enabled);
+                
+                const statusName = settingKey.replace(/([A-Z])/g, ' $1').toLowerCase();
+                
+                if (coreAPI.showInfoToast) {
+                    showInfoToast(`${statusName} ${!isEnabled ? 'enabled' : 'disabled'}`);
+                }
+            }
+        });
     });
 });
