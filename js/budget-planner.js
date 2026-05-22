@@ -1,196 +1,394 @@
+// budget-planner.js
 import { Database } from './database.js';
+import { escapeHtml } from './utils.js';
+import { getCategoryBudgetType } from './constants.js';
 
-function escapeHtml(text) { 
-    const div = document.createElement('div'); 
-    div.textContent = text; 
-    return div.innerHTML; 
-}
-
+// ===================================
+// STATE MANAGEMENT
+// ===================================
 let core = {};
-
-// 1. Start completely empty - data will come from Firebase
 let customFunds = [];
 let simulatedData = {};
-
 let editingFundId = null;
 let selectedFundId = null;
+let warningToastTimeout = null;
 
+// ===================================
+// BUDGET PLANNER MODULE
+// ===================================
 export const BudgetPlanner = {
+    
+    // ===============================
+    // INITIALIZATION
+    // ===============================
     init(coreFunctions) {
         core = coreFunctions;
+        this.setupEventListeners();
+    },
 
+    // ===============================
+    // EVENT LISTENERS SETUP
+    // ===============================
+    setupEventListeners() {
         const modal = document.getElementById('budget-modal');
-        if (!modal) return;
-
-        const self = this;
+        if (!modal) {
+            console.warn("Budget modal HTML missing. Skipping init.");
+            return;
+        }
 
         // Modal trigger
+        this.setupModalTrigger(modal);
+        
+        // Close button
+        this.setupCloseButton(modal);
+        
+        // Fund form submission
+        this.setupFundForm();
+        
+        // Fund list interactions (edit, delete, select)
+        this.setupFundListDelegation(modal);
+        
+        // Simulation controls
+        this.setupSimulationControls(modal);
+        
+        // Month picker change listener
+        this.setupMonthPickerListener();
+    },
+
+    setupModalTrigger(modal) {
         const trigger = document.getElementById('budget-planning-trigger');
-        if(trigger) {
-            trigger.addEventListener('click', () => {
+        if (trigger) {
+            trigger.addEventListener('click', async () => {  // ✅ Make it async
                 modal.classList.add('active');
                 document.body.style.overflow = 'hidden';
                 
+                // ✅ Clean up orphaned allocations first
+                await this.cleanupOrphanedAllocations();
+                
                 // Auto-select first fund if none selected
-                if(!selectedFundId && customFunds.length > 0) {
+                if (!selectedFundId && customFunds.length > 0) {
                     selectedFundId = customFunds[0].id;
                 }
                 
-                self.renderFundsList();
-                if(selectedFundId) self.renderChartForFund(selectedFundId); 
-                self.updateSavingsGoalBox();
+                this.renderFundsList();
+                if (selectedFundId) this.renderChartForFund(selectedFundId);
+                this.updateSavingsGoalBox();
             });
         }
+    },
 
-        // Close modal
+    setupCloseButton(modal) {
         const closeBtn = document.getElementById('close-budget-modal');
-        if(closeBtn) {
+        if (closeBtn) {
             closeBtn.addEventListener('click', () => {
                 modal.classList.remove('active');
                 document.body.style.overflow = 'auto';
                 
-                if(window.budgetChart) {
+                if (window.budgetChart) {
                     window.budgetChart.destroy();
                     window.budgetChart = null;
                 }
-                self.resetSimUI();
+                this.resetSimUI();
             });
         }
+    },
 
-        // Add / Edit Fund Form Submit
+    setupFundForm() {
         const form = document.getElementById('custom-fund-form');
-        if(form) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                if(!core.getUser || !core.getUser()) {
-                    alert('Please log in to save funds.');
-                    return;
+        if (!form) return;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (!core.getUser || !core.getUser()) {
+                if (core.showErrorToast) {
+                    core.showErrorToast('Please log in to save funds');
                 }
+                return;
+            }
 
-                const name = document.getElementById('cf-name').value.trim();
-                const months = parseInt(document.getElementById('cf-months').value);
-                const amount = parseFloat(document.getElementById('cf-amount').value);
+            const name = document.getElementById('cf-name').value.trim();
+            const months = parseInt(document.getElementById('cf-months').value);
+            const amount = parseFloat(document.getElementById('cf-amount').value);
 
-                if(!name || isNaN(months) || isNaN(amount)) return;
+            // Validation
+            if (!this.validateFundInput(name, months, amount)) return;
 
-                if(editingFundId) {
-                    const fund = customFunds.find(f => f.id === editingFundId);
-                    if(fund) {
-                        fund.name = name;
-                        fund.months = months;
-                        fund.amount = amount;
-                    }
-                    editingFundId = null;
-                    document.getElementById('cf-submit-btn').textContent = 'Add';
+            try {
+                if (editingFundId) {
+                    await this.updateExistingFund(editingFundId, name, months, amount);
                 } else {
-                    const newFund = {
-                        id: Date.now().toString(),
-                        name,
-                        months,
-                        amount,
-                        createdAt: new Date().toISOString()
-                    };
-                    customFunds.push(newFund);
-                    selectedFundId = newFund.id;
+                    await this.createNewFund(name, months, amount);
                 }
                 
                 form.reset();
+                this.renderFundsList();
+                this.renderChartForFund(selectedFundId);
+                this.updateSavingsGoalBox();
                 
-                // SAVE TO FIREBASE
-                await self.saveFunds();
-                
-                self.renderFundsList();
-                self.renderChartForFund(selectedFundId);
-            });
-        }
-
-        // List Delegation
-        const list = document.getElementById('custom-funds-list');
-        if(list) {
-            list.addEventListener('click', async (e) => {
-                const btnEdit = e.target.closest('.edit-cf-btn');
-                const btnDel = e.target.closest('.delete-cf-btn');
-                const row = e.target.closest('.cf-item');
-
-                if(btnDel) {
-                    const id = btnDel.dataset.id;
-                    if(confirm('Are you sure you want to delete this fund?')) {
-                        customFunds = customFunds.filter(f => f.id !== id);
-                        delete simulatedData[id];
-                        
-                        if(selectedFundId === id) {
-                            selectedFundId = customFunds.length > 0 ? customFunds[0].id : null;
-                        }
-                        
-                        // SAVE TO FIREBASE
-                        await self.saveFunds();
-                        
-                        self.renderFundsList();
-                        if(selectedFundId) {
-                            self.renderChartForFund(selectedFundId);
-                        } else if(window.budgetChart) {
-                            window.budgetChart.destroy();
-                            window.budgetChart = null;
-                        }
-                        
-                        self.updateSavingsGoalBox();
-                    }
-                    return;
+            } catch (error) {
+                console.error('Error saving fund:', error);
+                if (core.showErrorToast) {
+                    core.showErrorToast('Failed to save fund. Please try again.');
                 }
-
-                if(btnEdit) {
-                    const id = btnEdit.dataset.id;
-                    const fund = customFunds.find(f => f.id === id);
-                    if(fund) {
-                        document.getElementById('cf-name').value = fund.name;
-                        document.getElementById('cf-months').value = fund.months;
-                        document.getElementById('cf-amount').value = fund.amount;
-                        editingFundId = id;
-                        document.getElementById('cf-submit-btn').textContent = 'Save';
-                    }
-                    return;
-                }
-
-                if(row) {
-                    selectedFundId = row.dataset.id;
-                    self.resetSimUI();
-                    self.renderFundsList();
-                    self.renderChartForFund(selectedFundId);
-                }
-            });
-        }
-
-        // Trigger budget recalculation when month picker changes
-        document.addEventListener('change', (e) => {
-            if(e.target.id === 'sim-month') {
-                self.updateSavingsGoalBox();
-            }
-        });
-
-        // Bulletproof Event Delegation for Simulation Buttons
-        document.addEventListener('click', (e) => {
-            const addSimBtn = e.target.closest('#add-sim-btn');
-            const editSimBtn = e.target.closest('#edit-sim-btn');
-            const cancelSimBtn = e.target.closest('#cancel-sim-btn');
-
-            if(addSimBtn || editSimBtn) {
-                e.preventDefault();
-                self.handleSimSubmit();
-            }
-
-            if(cancelSimBtn) {
-                e.preventDefault();
-                self.resetSimUI();
             }
         });
     },
 
-    // --- FIREBASE SYNC METHODS RESTORED ---
-    
+    setupFundListDelegation(modal) {
+        modal.addEventListener('click', async (e) => {
+            const list = document.getElementById('custom-funds-list');
+            if (!list || !list.contains(e.target)) return;
+            
+            const btnEdit = e.target.closest('.edit-cf-btn');
+            const btnDel = e.target.closest('.delete-cf-btn');
+            const row = e.target.closest('.cf-item');
+
+            if (btnDel) {
+                e.preventDefault();
+                e.stopPropagation();
+                await this.handleDeleteFund(btnDel.dataset.id);
+                return;
+            }
+
+            if (btnEdit) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleEditFund(btnEdit.dataset.id);
+                return;
+            }
+
+            if (row && !btnEdit && !btnDel) {
+                selectedFundId = row.dataset.id;
+                this.resetSimUI();
+                this.renderFundsList();
+                this.renderChartForFund(selectedFundId);
+            }
+        });
+    },
+
+    setupSimulationControls(modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target.id === 'add-sim-btn' || e.target.id === 'edit-sim-btn') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handleSimSubmit();
+                return;
+            }
+
+            if (e.target.id === 'cancel-sim-btn') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.resetSimUI();
+                return;
+            }
+        });
+    },
+
+    setupMonthPickerListener() {
+        document.addEventListener('change', (e) => {
+            if (e.target.id === 'sim-month') {
+                this.updateSavingsGoalBox();
+            }
+        });
+    },
+
+    // ===============================
+    // VALIDATION
+    // ===============================
+    validateFundInput(name, months, amount) {
+        if (!name) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please enter a fund name');
+            }
+            document.getElementById('cf-name').focus();
+            return false;
+        }
+
+        if (isNaN(months) || months <= 0) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please enter a valid number of months');
+            }
+            document.getElementById('cf-months').focus();
+            return false;
+        }
+
+        if (isNaN(amount) || amount <= 0) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please enter a valid budget amount');
+            }
+            document.getElementById('cf-amount').focus();
+            return false;
+        }
+
+        return true;
+    },
+
+    // ===============================
+    // FUND CRUD OPERATIONS
+    // ===============================
+    async createNewFund(name, months, amount) {
+        const newFund = {
+            id: Date.now().toString(),
+            name,
+            months,
+            amount,
+            createdAt: new Date().toISOString()
+        };
+        
+        customFunds.push(newFund);
+        selectedFundId = newFund.id;
+        
+        await this.saveFunds();
+        
+        if (core.showSuccessToast) {
+            core.showSuccessToast(`Created "${name}" fund`);
+        }
+    },
+
+    async updateExistingFund(fundId, name, months, amount) {
+        const fund = customFunds.find(f => f.id === fundId);
+        if (fund) {
+            fund.name = name;
+            fund.months = months;
+            fund.amount = amount;
+        }
+        
+        editingFundId = null;
+        document.getElementById('cf-submit-btn').textContent = 'Add';
+        
+        await this.saveFunds();
+        
+        if (core.showSuccessToast) {
+            core.showSuccessToast(`Updated "${name}"`);
+        }
+    },
+
+    handleEditFund(fundId) {
+        const fund = customFunds.find(f => f.id === fundId);
+        if (!fund) return;
+        
+        document.getElementById('cf-name').value = fund.name;
+        document.getElementById('cf-months').value = fund.months;
+        document.getElementById('cf-amount').value = fund.amount;
+        editingFundId = fundId;
+        document.getElementById('cf-submit-btn').textContent = 'Save';
+        
+        document.getElementById('cf-name').focus();
+    },
+
+    // Add this new method to BudgetPlanner object (around line 280)
+    async cleanupOrphanedAllocations() {
+        if (!core.getUser || !core.getUser()) return;
+        
+        // Get list of valid fund IDs
+        const validFundIds = customFunds.map(f => f.id);
+        
+        // Find orphaned allocations
+        const orphanedIds = Object.keys(simulatedData).filter(id => !validFundIds.includes(id));
+        
+        if (orphanedIds.length > 0) {
+            console.log('🧹 Cleaning up orphaned allocations:', orphanedIds);
+            
+            // Remove orphaned allocations
+            orphanedIds.forEach(id => {
+                delete simulatedData[id];
+            });
+            
+            // Save to Firebase
+            await this.saveFunds();
+            
+            if (core.showInfoToast) {
+                core.showInfoToast(`Cleaned up ${orphanedIds.length} orphaned allocation(s)`);
+            }
+            
+            // Refresh UI
+            this.updateSavingsGoalBox();
+        }
+    },
+
+    async handleDeleteFund(fundId) {
+        const fund = customFunds.find(f => f.id === fundId);
+        const fundName = fund ? fund.name : 'this fund';
+        
+        const confirmed = core.showConfirm 
+            ? await core.showConfirm(
+                `Are you sure you want to delete "${fundName}"? All allocation data will be lost.`,
+                'Delete Fund'
+            )
+            : confirm('Are you sure you want to delete this fund?');
+        
+        if (!confirmed) return;
+
+        try {
+            customFunds = customFunds.filter(f => f.id !== fundId);
+            
+            // ✅ DELETE ALLOCATIONS
+            delete simulatedData[fundId];
+            
+            console.log('🗑️ Deleted fund and allocations:', fundId);
+            console.log('Remaining allocations:', simulatedData);
+            
+            if (selectedFundId === fundId) {
+                selectedFundId = customFunds.length > 0 ? customFunds[0].id : null;
+            }
+            
+            await this.saveFunds();
+            
+            this.renderFundsList();
+            if (selectedFundId) {
+                this.renderChartForFund(selectedFundId);
+            } else if (window.budgetChart) {
+                window.budgetChart.destroy();
+                window.budgetChart = null;
+            }
+            
+            this.updateSavingsGoalBox();
+            
+            if (core.showSuccessToast) {
+                core.showSuccessToast(`Deleted "${fundName}"`);
+            }
+        } catch (error) {
+            console.error('Error deleting fund:', error);
+            if (core.showErrorToast) {
+                core.showErrorToast('Failed to delete fund. Please try again.');
+            }
+        }
+    },
+
+    // ===============================
+    // FIREBASE SYNC
+    // ===============================
+    async saveFunds() {
+        if (core.getUser && core.getUser()) {
+            const user = core.getUser();
+            if (core.showSync) core.showSync();
+            
+            try {
+                await Database.saveSinkingFunds(
+                    user.uid, 
+                    customFunds, 
+                    simulatedData
+                );
+            } catch (error) {
+                console.error("Failed to save funds to Firebase:", error);
+                if (core.showErrorToast) {
+                    core.showErrorToast('Failed to sync with cloud. Changes saved locally.');
+                }
+                throw error;
+            } finally {
+                if (core.hideSync) core.hideSync();
+            }
+        }
+    },
+
+    // ===============================
+    // DATA ACCESSORS (for export)
+    // ===============================
     setFunds(funds) {
         customFunds = funds || [];
-        if(customFunds.length > 0 && !selectedFundId) {
+        if (customFunds.length > 0 && !selectedFundId) {
             selectedFundId = customFunds[0].id;
         }
     },
@@ -199,111 +397,82 @@ export const BudgetPlanner = {
         simulatedData = data || {};
     },
 
-    async saveFunds() {
-        if (core.getUser && core.getUser()) {
-            const user = core.getUser();
-            if (core.showSync) core.showSync();
-            
-            try {
-                const budgetData = {
-                    needs: parseInt(document.getElementById('input-needs')?.value || 50),
-                    wants: parseInt(document.getElementById('input-wants')?.value || 30),
-                    savings: parseInt(document.getElementById('input-savings')?.value || 20),
-                    income: core.getIncome ? core.getIncome() : 0
-                };
-                
-                await Database.saveBudget(
-                    user.uid, 
-                    budgetData, 
-                    core.getCurrency ? core.getCurrency() : 'USD', 
-                    customFunds, 
-                    simulatedData
-                );
-            } catch (error) {
-                console.error("Failed to save to Firebase:", error);
-            } finally {
-                if (core.hideSync) core.hideSync();
-            }
-        }
+    getFunds() {
+        return customFunds;
     },
 
-    // --- END FIREBASE SYNC METHODS ---
+    getSimulatedData() {
+        return simulatedData;
+    },
 
+    // ===============================
+    // ALLOCATION MANAGEMENT
+    // ===============================
     async handleSimSubmit() {
-        if(!selectedFundId) {
-            alert('Please select a fund first.');
+        if (!selectedFundId) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please select a fund first');
+            }
             return;
         }
         
-        if(!core.getUser || !core.getUser()) {
-            alert('Please log in to save data.');
+        if (!core.getUser || !core.getUser()) {
+            if (core.showErrorToast) {
+                core.showErrorToast('Please log in to save allocation data');
+            }
             return;
         }
         
         const monthVal = document.getElementById('sim-month').value;
         const amountVal = parseFloat(document.getElementById('sim-amount').value);
         
-        if(!monthVal || isNaN(amountVal)) {
-            alert('Please select a month and enter a valid amount.');
+        if (!monthVal) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please select a month');
+            }
+            document.getElementById('sim-month').focus();
+            return;
+        }
+        
+        if (isNaN(amountVal) || amountVal < 0) {
+            if (core.showWarningToast) {
+                core.showWarningToast('Please enter a valid allocation amount');
+            }
+            document.getElementById('sim-amount').focus();
             return;
         }
 
-        if(!simulatedData[selectedFundId]) {
-            simulatedData[selectedFundId] = {};
-        }
-        
-        simulatedData[selectedFundId][monthVal] = amountVal;
-        
-        // SAVE TO FIREBASE
-        await this.saveFunds();
-        
-        this.resetSimUI();
-        this.renderChartForFund(selectedFundId);
-        this.updateSavingsGoalBox();
-    },
-
-    updateSavingsGoalBox() {
-        const savingsInput = document.getElementById('input-savings');
-        const leftBox = document.getElementById('modal-savings-left');
-        const monthLabel = document.getElementById('modal-savings-month-label');
-        const monthInput = document.getElementById('sim-month');
-        
-        if(!savingsInput || !leftBox || !core.getIncome) return;
-        
-        const savingsPct = parseInt(savingsInput.value) || 0;
-        const income = core.getIncome();
-        const totalBudget = income * (savingsPct / 100);
-        
-        let selectedMonthStr = monthInput ? monthInput.value : null;
-        if(!selectedMonthStr) {
-            const now = new Date();
-            selectedMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        }
-        
-        let totalAllocatedThisMonth = 0;
-        for (const fundId in simulatedData) {
-            if (simulatedData[fundId][selectedMonthStr]) {
-                totalAllocatedThisMonth += simulatedData[fundId][selectedMonthStr];
+        try {
+            if (!simulatedData[selectedFundId]) {
+                simulatedData[selectedFundId] = {};
             }
-        }
-        
-        const remaining = totalBudget - totalAllocatedThisMonth;
-        
-        leftBox.textContent = core.formatCurrency ? core.formatCurrency(remaining) : remaining.toLocaleString();
-        
-        if (remaining < 0) {
-            leftBox.className = 'text-xl text-red-400 font-mono font-medium';
-        } else if (remaining === 0) {
-            leftBox.className = 'text-xl text-zinc-400 font-mono font-medium';
-        } else {
-            leftBox.className = 'text-xl text-emerald-400 font-mono font-medium';
-        }
-        
-        if (monthLabel && selectedMonthStr) {
-            const [year, month] = selectedMonthStr.split('-');
-            const date = new Date(year, parseInt(month) - 1, 1);
-            const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-            monthLabel.textContent = `for ${monthName}`;
+            
+            const isEdit = simulatedData[selectedFundId][monthVal] !== undefined;
+            simulatedData[selectedFundId][monthVal] = amountVal;
+            
+            await this.saveFunds();
+            
+            this.resetSimUI();
+            this.renderChartForFund(selectedFundId);
+            this.updateSavingsGoalBox();
+            
+            if (core.showSuccessToast) {
+                const [year, month] = monthVal.split('-');
+                const date = new Date(year, parseInt(month) - 1);
+                const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                const formattedAmount = core.formatCurrency ? core.formatCurrency(amountVal) : `$${amountVal}`;
+                
+                core.showSuccessToast(
+                    isEdit 
+                        ? `Updated ${monthName} allocation to ${formattedAmount}`
+                        : `Added ${formattedAmount} for ${monthName}`
+                );
+            }
+        } catch (error) {
+            console.error('Error saving allocation:', error);
+            if (core.showErrorToast) {
+                core.showErrorToast('Failed to save allocation. Please try again.');
+            }
         }
     },
 
@@ -311,27 +480,215 @@ export const BudgetPlanner = {
         const amountInput = document.getElementById('sim-amount');
         const monthInput = document.getElementById('sim-month');
         
-        if(amountInput) amountInput.value = '';
-        if(monthInput) monthInput.disabled = false;
+        if (amountInput) amountInput.value = '';
+        if (monthInput) monthInput.disabled = false;
         
         document.getElementById('add-sim-btn')?.classList.remove('hidden');
         document.getElementById('edit-sim-btn')?.classList.add('hidden');
         document.getElementById('cancel-sim-btn')?.classList.add('hidden');
     },
 
+    // ===============================
+    // SAVINGS BUDGET CALCULATION
+    // ===============================
+    updateSavingsGoalBox() {
+        const leftBox = document.getElementById('modal-savings-left');
+        const monthLabel = document.getElementById('modal-savings-month-label');
+        const monthInput = document.getElementById('sim-month');
+        
+        if (!leftBox || !core.getIncome) return;
+        
+        try {
+            const income = core.getIncome();
+            
+            // Get selected month
+            let selectedMonthStr = monthInput ? monthInput.value : null;
+            if (!selectedMonthStr) {
+                const now = new Date();
+                selectedMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            }
+            
+            // Get budget percentages
+            const { needsPercent, wantsPercent, savingsPercent } = this.getBudgetPercentages();
+            const needsBudget = income * (needsPercent / 100);
+            const wantsBudget = income * (wantsPercent / 100);
+            const savingsBudget = income * (savingsPercent / 100);
+            
+            // Calculate expenses by category type
+            const { needsSpent, wantsSpent } = this.calculateMonthlySpending(selectedMonthStr);
+            
+            // Calculate fund allocations
+            const totalAllocatedThisMonth = this.calculateFundAllocations(selectedMonthStr);
+            
+            // Calculate available savings budget
+            const totalNeedsWantsBudget = needsBudget + wantsBudget;
+            const totalNeedsWantsSpent = needsSpent + wantsSpent;
+            
+            let availableSavingsBudget = 0;
+            
+            if (totalNeedsWantsSpent <= totalNeedsWantsBudget) {
+                // ✅ SCENARIO 1: Under budget
+                availableSavingsBudget = savingsBudget - totalAllocatedThisMonth;
+                console.log(`✅ Under budget: ${savingsBudget} - ${totalAllocatedThisMonth} = ${availableSavingsBudget}`);
+            } else {
+                // ❌ SCENARIO 2: Over budget
+                const overBudgetAmount = totalNeedsWantsSpent - totalNeedsWantsBudget;
+                availableSavingsBudget = savingsBudget - overBudgetAmount - totalAllocatedThisMonth;
+                console.log(`❌ Over budget by ${overBudgetAmount}: ${savingsBudget} - ${overBudgetAmount} - ${totalAllocatedThisMonth} = ${availableSavingsBudget}`);
+            }
+            
+            // Display result
+            this.displaySavingsResult(leftBox, availableSavingsBudget);
+            
+            // Show warnings if necessary
+            this.showSavingsWarnings(availableSavingsBudget, totalNeedsWantsSpent, totalNeedsWantsBudget);
+            
+            // Update month label
+            this.updateMonthLabel(monthLabel, selectedMonthStr);
+            
+        } catch (error) {
+            console.error('Error calculating savings budget:', error);
+            if (leftBox) {
+                leftBox.textContent = 'Error';
+                leftBox.className = 'text-xl text-red-400 font-mono font-medium';
+            }
+        }
+    },
+
+    getBudgetPercentages() {
+        const needsInput = document.getElementById('input-needs');
+        const wantsInput = document.getElementById('input-wants');
+        const savingsInput = document.getElementById('input-savings');
+        
+        return {
+            needsPercent: needsInput ? parseInt(needsInput.value) : 50,
+            wantsPercent: wantsInput ? parseInt(wantsInput.value) : 30,
+            savingsPercent: savingsInput ? parseInt(savingsInput.value) : 20
+        };
+    },
+
+    calculateMonthlySpending(selectedMonthStr) {
+        const expenses = core.getExpenses ? core.getExpenses() : [];
+        const [year, month] = selectedMonthStr.split('-');
+        const currentCurrency = core.getCurrency ? core.getCurrency() : 'USD';
+        
+        let needsSpent = 0;
+        let wantsSpent = 0;
+        
+        for (const exp of expenses) {
+            const expDate = new Date(exp.date);
+            const expYear = expDate.getFullYear().toString();
+            const expMonth = String(expDate.getMonth() + 1).padStart(2, '0');
+            
+            if (expYear === year && expMonth === month) {
+                let amount = exp.amount;
+                const expenseCurrency = exp.currency || currentCurrency;
+                
+                // Convert currency if needed
+                if (expenseCurrency !== currentCurrency && typeof window !== 'undefined' && window.convertCurrency) {
+                    amount = window.convertCurrency(amount, expenseCurrency, currentCurrency);
+                }
+                
+                // Categorize by budget type
+                const budgetType = getCategoryBudgetType(exp.category);
+                
+                if (budgetType === 'needs') {
+                    needsSpent += amount;
+                } else if (budgetType === 'wants') {
+                    wantsSpent += amount;
+                }
+            }
+        }
+        
+        return { needsSpent, wantsSpent };
+    },
+
+    calculateFundAllocations(selectedMonthStr) {
+        let totalAllocated = 0;
+        
+        console.log('📊 Calculating fund allocations for', selectedMonthStr);
+        console.log('All simulatedData:', simulatedData);
+        console.log('Valid fund IDs:', customFunds.map(f => f.id));
+        
+        for (const fundId in simulatedData) {
+            console.log(`  Checking fund ${fundId}:`, simulatedData[fundId]);
+            
+            if (simulatedData[fundId][selectedMonthStr]) {
+                const amount = simulatedData[fundId][selectedMonthStr];
+                console.log(`    ✅ Found allocation: ${amount}`);
+                totalAllocated += amount;
+            }
+        }
+        
+        console.log('💰 Total Allocated:', totalAllocated);
+        
+        return totalAllocated;
+    },
+
+    displaySavingsResult(leftBox, availableSavingsBudget) {
+        leftBox.textContent = core.formatCurrency 
+            ? core.formatCurrency(availableSavingsBudget) 
+            : availableSavingsBudget.toLocaleString();
+        
+        if (availableSavingsBudget < 0) {
+            leftBox.className = 'text-xl text-red-400 font-mono font-medium';
+        } else if (availableSavingsBudget === 0) {
+            leftBox.className = 'text-xl text-zinc-400 font-mono font-medium';
+        } else {
+            leftBox.className = 'text-xl text-emerald-400 font-mono font-medium';
+        }
+    },
+
+    showSavingsWarnings(availableSavingsBudget, totalNeedsWantsSpent, totalNeedsWantsBudget) {
+        if (availableSavingsBudget < 0 && core.showWarningToast) {
+            const overage = Math.abs(availableSavingsBudget);
+            
+            clearTimeout(warningToastTimeout);
+            
+            warningToastTimeout = setTimeout(() => {
+                if (totalNeedsWantsSpent > totalNeedsWantsBudget) {
+                    const overBudgetAmount = totalNeedsWantsSpent - totalNeedsWantsBudget;
+                    core.showWarningToast(
+                        `You're over budget by ${core.formatCurrency(overBudgetAmount)} on Needs/Wants. Available savings: ${core.formatCurrency(availableSavingsBudget)}`
+                    );
+                } else {
+                    core.showWarningToast(
+                        `You've over-allocated savings by ${core.formatCurrency(overage)}. Reduce fund allocations or increase income.`
+                    );
+                }
+            }, 1000);
+        }
+    },
+
+    updateMonthLabel(monthLabel, selectedMonthStr) {
+        if (!monthLabel || !selectedMonthStr) return;
+        
+        const [year, month] = selectedMonthStr.split('-');
+        const date = new Date(year, parseInt(month) - 1, 1);
+        const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        monthLabel.textContent = `for ${monthName}`;
+    },
+
+    // ===============================
+    // RENDERING
+    // ===============================
     renderFundsList() {
         const list = document.getElementById('custom-funds-list');
-        if(!list) return;
+        if (!list) return;
 
-        if(customFunds.length === 0) {
+        if (customFunds.length === 0) {
             list.innerHTML = '<div class="text-xs text-zinc-500 italic text-center py-4">No funds added yet.</div>';
             return;
         }
 
         list.innerHTML = customFunds.map(fund => {
             const isSelected = fund.id === selectedFundId;
-            const borderClass = isSelected ? 'border-emerald-500/50 bg-white/5' : 'border-zinc-800/50 hover:bg-white/5';
-            const formattedAmount = core.formatCurrency ? core.formatCurrency(fund.amount) : fund.amount.toLocaleString();
+            const borderClass = isSelected 
+                ? 'border-emerald-500/50 bg-white/5' 
+                : 'border-zinc-800/50 hover:bg-white/5';
+            const formattedAmount = core.formatCurrency 
+                ? core.formatCurrency(fund.amount) 
+                : fund.amount.toLocaleString();
 
             return `
             <div class="cf-item flex items-center justify-between p-3 border ${borderClass} rounded-lg transition-colors cursor-pointer group" data-id="${fund.id}">
@@ -344,10 +701,10 @@ export const BudgetPlanner = {
                     </div>
                 </div>
                 <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button class="edit-cf-btn w-8 h-8 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 flex items-center justify-center transition-colors" data-id="${fund.id}" title="Edit">
+                    <button type="button" class="edit-cf-btn w-8 h-8 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 flex items-center justify-center transition-colors" data-id="${fund.id}" title="Edit">
                         <iconify-icon icon="solar:pen-linear"></iconify-icon>
                     </button>
-                    <button class="delete-cf-btn w-8 h-8 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-colors" data-id="${fund.id}" title="Delete">
+                    <button type="button" class="delete-cf-btn w-8 h-8 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center transition-colors" data-id="${fund.id}" title="Delete">
                         <iconify-icon icon="solar:trash-bin-minimalistic-linear"></iconify-icon>
                     </button>
                 </div>
@@ -358,44 +715,65 @@ export const BudgetPlanner = {
 
     renderChartForFund(fundId) {
         const canvas = document.getElementById('budget-chart');
-        if(!canvas) return;
+        if (!canvas) return;
 
         const fund = customFunds.find(f => f.id === fundId);
-        if(!fund) return;
+        if (!fund) return;
 
-        if(window.budgetChart) {
+        if (window.budgetChart) {
             window.budgetChart.destroy();
         }
 
-        const simMonthInput = document.getElementById('sim-month');
+        // Setup month range
+        const { startDate, endDate, startMonthStr, endMonthStr } = this.getFundDateRange(fund);
+        this.configureDatePicker(startMonthStr, endMonthStr);
+
+        // Prepare chart data
+        const { labels, expectedData, actualData, monthKeys, totalSaved } = this.prepareChartData(fund, startDate);
+
+        // Update progress circle
+        this.updateProgressCircle(totalSaved, fund.amount);
+
+        // Render chart
+        this.renderChart(canvas, labels, expectedData, actualData, monthKeys);
+    },
+
+    getFundDateRange(fund) {
         const startDate = fund.createdAt ? new Date(fund.createdAt) : new Date();
         const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + fund.months - 1, 1);
         
         const startMonthStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
         const endMonthStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
         
-        if(simMonthInput && !simMonthInput.disabled) {
+        return { startDate, endDate, startMonthStr, endMonthStr };
+    },
+
+    configureDatePicker(startMonthStr, endMonthStr) {
+        const simMonthInput = document.getElementById('sim-month');
+        if (simMonthInput && !simMonthInput.disabled) {
             simMonthInput.min = startMonthStr;
             simMonthInput.max = endMonthStr;
-            if(!simMonthInput.value || simMonthInput.value < startMonthStr || simMonthInput.value > endMonthStr) {
+            if (!simMonthInput.value || simMonthInput.value < startMonthStr || simMonthInput.value > endMonthStr) {
                 simMonthInput.value = startMonthStr;
                 this.updateSavingsGoalBox();
             }
         }
+    },
 
+    prepareChartData(fund, startDate) {
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const labels = [];
         const expectedData = [];
         const actualData = [];
-        const monthKeys = []; 
+        const monthKeys = [];
         const monthlyDue = fund.amount / fund.months;
         
-        const simData = simulatedData[fundId];
+        const simData = simulatedData[fund.id];
         const hasSimData = simData && Object.keys(simData).length > 0;
         
         let totalSaved = 0;
 
-        for(let i = 0; i < fund.months; i++) {
+        for (let i = 0; i < fund.months; i++) {
             const stepDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
             const stepMonthStr = `${stepDate.getFullYear()}-${String(stepDate.getMonth() + 1).padStart(2, '0')}`;
             
@@ -403,39 +781,38 @@ export const BudgetPlanner = {
             monthKeys.push(stepMonthStr);
             expectedData.push(monthlyDue);
 
-            // If user added data, use it. Otherwise, stay at 0. NO DEMO DATA.
             if (hasSimData && simData[stepMonthStr] !== undefined) {
                 const val = simData[stepMonthStr];
-                actualData.push(val); 
+                actualData.push(val);
                 totalSaved += val;
             } else {
-                actualData.push(0); 
+                actualData.push(0);
             }
         }
 
-        // ==========================================
-        // UPDATE LEFT DONUT CHART (PROGRESS)
-        // ==========================================
-        const progressPercent = fund.amount > 0 ? Math.min((totalSaved / fund.amount) * 100, 100) : 0;
+        return { labels, expectedData, actualData, monthKeys, totalSaved };
+    },
+
+    updateProgressCircle(totalSaved, goalAmount) {
+        const progressPercent = goalAmount > 0 ? Math.min((totalSaved / goalAmount) * 100, 100) : 0;
         
         const circle = document.getElementById('fund-progress-circle');
-        if(circle) {
+        if (circle) {
             const circumference = 2 * Math.PI * 100;
             const offset = circumference - (progressPercent / 100) * circumference;
             circle.style.strokeDashoffset = offset;
         }
         
         const percentEl = document.getElementById('fund-progress-percent');
-        if(percentEl) percentEl.textContent = Math.round(progressPercent) + '%';
+        if (percentEl) percentEl.textContent = Math.round(progressPercent) + '%';
         
         const savedEl = document.getElementById('fund-saved-amount');
         const goalEl = document.getElementById('fund-goal-amount');
-        if(savedEl) savedEl.textContent = core.formatCurrency ? core.formatCurrency(totalSaved) : totalSaved.toLocaleString();
-        if(goalEl) goalEl.textContent = core.formatCurrency ? core.formatCurrency(fund.amount) : fund.amount.toLocaleString();
+        if (savedEl) savedEl.textContent = core.formatCurrency ? core.formatCurrency(totalSaved) : totalSaved.toLocaleString();
+        if (goalEl) goalEl.textContent = core.formatCurrency ? core.formatCurrency(goalAmount) : goalAmount.toLocaleString();
+    },
 
-        // ==========================================
-        // RENDER RIGHT CHART (CHART.JS)
-        // ==========================================
+    renderChart(canvas, labels, expectedData, actualData, monthKeys) {
         const ctx = canvas.getContext('2d');
         const self = this;
 
@@ -449,10 +826,10 @@ export const BudgetPlanner = {
                         data: actualData,
                         backgroundColor: (context) => {
                             const chart = context.chart;
-                            const {ctx, chartArea} = chart;
+                            const { ctx, chartArea } = chart;
                             if (!chartArea) return null;
                             const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.5)'); 
+                            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.5)');
                             gradient.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
                             return gradient;
                         },
@@ -487,16 +864,16 @@ export const BudgetPlanner = {
                 onClick: (event, elements) => {
                     if (elements.length > 0) {
                         const datasetIndex = elements[0].datasetIndex;
-                        if(datasetIndex === 0) { 
+                        if (datasetIndex === 0) {
                             const index = elements[0].index;
                             const monthKey = monthKeys[index];
                             const amount = actualData[index];
                             
                             document.getElementById('sim-month').value = monthKey;
-                            document.getElementById('sim-month').disabled = true; 
+                            document.getElementById('sim-month').disabled = true;
                             const amountInput = document.getElementById('sim-amount');
                             amountInput.value = amount;
-                            amountInput.focus(); 
+                            amountInput.focus();
                             
                             document.getElementById('add-sim-btn').classList.add('hidden');
                             document.getElementById('edit-sim-btn').classList.remove('hidden');
@@ -511,7 +888,12 @@ export const BudgetPlanner = {
                     legend: {
                         display: true,
                         position: 'top',
-                        labels: { color: '#a1a1aa', font: { family: 'Inter, sans-serif', size: 12 }, usePointStyle: true, padding: 20 }
+                        labels: {
+                            color: '#a1a1aa',
+                            font: { family: 'Inter, sans-serif', size: 12 },
+                            usePointStyle: true,
+                            padding: 20
+                        }
                     },
                     tooltip: {
                         backgroundColor: 'rgba(24, 24, 27, 0.95)',
@@ -521,7 +903,7 @@ export const BudgetPlanner = {
                         borderWidth: 1,
                         padding: 12,
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 let label = context.dataset.label || '';
                                 if (label) label += ': ';
                                 if (core && core.formatCurrency) {
@@ -542,12 +924,12 @@ export const BudgetPlanner = {
                     },
                     y: {
                         beginAtZero: true,
-                        suggestedMax: monthlyDue * 1.5,
+                        suggestedMax: expectedData[0] * 1.5,
                         title: { display: true, text: 'Monthly Allocation Amount', color: '#71717a' },
                         grid: { color: 'rgba(63, 63, 70, 0.15)', drawBorder: false },
-                        ticks: { 
+                        ticks: {
                             color: '#a1a1aa',
-                            callback: function(value) {
+                            callback: function (value) {
                                 if (core && core.formatCurrency) {
                                     return core.formatCurrency(value);
                                 }
@@ -561,6 +943,9 @@ export const BudgetPlanner = {
     }
 };
 
+// ===================================
+// GLOBAL EXPORT
+// ===================================
 if (typeof window !== 'undefined') {
     window.BudgetPlanner = BudgetPlanner;
 }
