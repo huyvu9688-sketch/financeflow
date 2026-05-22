@@ -4,36 +4,40 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, o
 export const Database = {
     async loadUserData(userId) {
         try {
+            // ✅ Load user's default currency FIRST
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            const userDefaultCurrency = userDoc.exists() ? (userDoc.data().currency || 'USD') : 'USD';
+            
             // Load Expenses
             const q = query(collection(db, 'expenses'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
             const snapshot = await getDocs(q);
             const expenses = snapshot.docs.map(d => ({
                 id: d.id,
                 ...d.data(),
-                date: d.data().date || new Date().toISOString().split('T')[0]
+                date: d.data().date || new Date().toISOString().split('T')[0],
+                currency: d.data().currency || userDefaultCurrency // ✅ Default to user's currency
             }));
 
             // Load Budget, Currency, Sinking Funds, and Fund Allocations
-            let budget = null;
             let currency = null;
             let sinkingFunds = [];
             let fundAllocations = {};
+            let monthlyBudgets = {};
             
-            const userDoc = await getDoc(doc(db, 'users', userId));
             if (userDoc.exists()) {
                 const data = userDoc.data();
-                budget = data.budget;
                 currency = data.currency;
                 sinkingFunds = data.sinkingFunds || [];
                 fundAllocations = data.fundAllocations || {};
+                monthlyBudgets = data.monthlyBudgets || {};
             }
 
             return { 
                 expenses, 
-                budget, 
                 currency, 
                 sinkingFunds,
-                fundAllocations
+                fundAllocations,
+                monthlyBudgets
             };
         } catch (error) {
             console.error('Load error:', error);
@@ -51,7 +55,6 @@ export const Database = {
         return docRef.id;
     },
 
-    // ✅ FIXED - Added userId parameter (not used but matches the call signature)
     async updateExpense(userId, expenseId, updates) {
         await updateDoc(doc(db, 'expenses', expenseId), { 
             ...updates, 
@@ -59,26 +62,27 @@ export const Database = {
         });
     },
 
-    // ✅ FIXED - Added userId parameter (not used but matches the call signature)
     async deleteExpense(userId, expenseId) {
         await deleteDoc(doc(db, 'expenses', expenseId));
     },
 
-    async saveBudget(userId, budget, currency, sinkingFunds = null, fundAllocations = null) {
+    async saveMonthlyBudget(userId, monthKey, budget, currency) {
         const dataToSave = {
-            budget: budget,
+            [`monthlyBudgets.${monthKey}`]: budget,
             currency: currency,
             updatedAt: new Date()
         };
         
-        if (sinkingFunds !== null) {
-            dataToSave.sinkingFunds = sinkingFunds;
-        }
+        await setDoc(doc(db, 'users', userId), dataToSave, { merge: true });
+    },
 
-        if (fundAllocations !== null) {
-            dataToSave.fundAllocations = fundAllocations;
-        }
-
+    async saveSinkingFunds(userId, sinkingFunds, fundAllocations) {
+        const dataToSave = {
+            sinkingFunds: sinkingFunds,
+            fundAllocations: fundAllocations,
+            updatedAt: new Date()
+        };
+        
         await setDoc(doc(db, 'users', userId), dataToSave, { merge: true });
     }
 };
