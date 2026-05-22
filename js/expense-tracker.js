@@ -1,27 +1,7 @@
 import { Database } from './database.js';
+import { getCategoryOptions, getCategoryColor, getCategoryBudgetType, getCategoryLabel } from './constants.js';
+import { escapeHtml, getDaysRemainingInMonth } from './utils.js';
 
-// Utility functions
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ✅ Fixed color mapping per category
-function getCategoryColor(category) {
-    const colorMap = {
-        'housing': 'hsl(0, 70%, 75%)',      // Red pastel
-        'food': 'hsl(51, 70%, 75%)',        // Yellow pastel
-        'transportation': 'hsl(102, 70%, 75%)', // Green pastel
-        'entertainment': 'hsl(153, 70%, 75%)',  // Cyan pastel
-        'healthcare': 'hsl(204, 70%, 75%)',     // Blue pastel
-        'shopping': 'hsl(255, 70%, 75%)',       // Purple pastel
-        'utilities': 'hsl(306, 70%, 75%)',      // Magenta pastel
-        'other': 'hsl(0, 0%, 60%)'              // Gray
-    };
-    
-    return colorMap[category.toLowerCase()] || 'hsl(0, 0%, 60%)';
-}
 
 function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
     const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
@@ -39,15 +19,6 @@ function describeArc(x, y, radius, startAngle, endAngle) {
     const end = polarToCartesian(x, y, radius, adjustedStartAngle);
     const largeArcFlag = (adjustedEndAngle - adjustedStartAngle) <= 180 ? "0" : "1";
     return ["M", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y].join(" ");
-}
-
-function getDaysRemainingInMonth(year, month) {
-    const lastDay = new Date(year, month + 1, 0);
-    const now = new Date();
-    if (year === now.getFullYear() && month === now.getMonth()) {
-        return lastDay.getDate() - now.getDate() + 1;
-    }
-    return lastDay.getDate();
 }
 
 // Core API reference
@@ -72,16 +43,26 @@ export const ExpenseTracker = {
             return;
         }
 
-        // Setup event listeners
+        const categoryFilter = document.getElementById('category-filter');
+        if (categoryFilter) {
+            categoryFilter.innerHTML = `
+                <option value="all">All Categories</option>
+                ${getCategoryOptions()}
+            `;
+        }
+
         const searchInput = document.getElementById('expense-search');
         if (searchInput) {
+            let searchTimeout;
             searchInput.addEventListener('input', (e) => {
-                this.state.currentSearchTerm = e.target.value.toLowerCase();
-                this.update();
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    this.state.currentSearchTerm = e.target.value.toLowerCase();
+                    this.update();
+                }, 300);
             });
         }
 
-        const categoryFilter = document.getElementById('category-filter');
         if (categoryFilter) {
             categoryFilter.addEventListener('change', (e) => {
                 this.state.currentFilter = e.target.value;
@@ -102,6 +83,13 @@ export const ExpenseTracker = {
                     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                                        'July', 'August', 'September', 'October', 'November', 'December'];
                     monthLabel.textContent = monthNames[this.state.selectedMonth];
+                }
+                
+                const modalLabel = document.getElementById('total-spend-label');
+                if (modalLabel) {
+                    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                       'July', 'August', 'September', 'October', 'November', 'December'];
+                    modalLabel.textContent = `${monthNames[this.state.selectedMonth]} ${this.state.selectedYear} Spend`;
                 }
                 
                 this.update();
@@ -127,19 +115,16 @@ export const ExpenseTracker = {
         const expenses = core.getExpenses();
         const income = core.getIncome();
         
-        // Filter by selected month/year
         const filtered = expenses.filter(exp => {
             const expDate = new Date(exp.date);
             return expDate.getMonth() === this.state.selectedMonth && 
                    expDate.getFullYear() === this.state.selectedYear;
         }).filter(exp => {
-            // Apply search and category filters
             const matchesSearch = exp.name.toLowerCase().includes(this.state.currentSearchTerm);
             const matchesCategory = this.state.currentFilter === 'all' || exp.category === this.state.currentFilter;
             return matchesSearch && matchesCategory;
         });
         
-        // Calculate category totals
         const categoryTotals = {};
         let totalSpend = 0;
         
@@ -151,10 +136,10 @@ export const ExpenseTracker = {
             totalSpend += exp.amount;
         });
         
-        // Render all sections
         this.renderHistoryList(filtered);
-        this.renderDonutChart(categoryTotals, totalSpend, income);
-        this.renderStats(totalSpend, income);
+        // ✅ We added 'filtered' to the end of this line
+        this.renderDonutChart(categoryTotals, totalSpend, income, filtered);
+        this.renderStats(totalSpend, income, categoryTotals); 
     },
 
     renderHistoryList(expenses) {
@@ -182,14 +167,7 @@ export const ExpenseTracker = {
                     <input type="text" class="expense-name-editable w-full" value="${escapeHtml(exp.name)}" data-id="${exp.id}" readonly>
                     <div class="text-xs text-zinc-500 mt-1 flex items-center gap-2">
                         <select class="expense-category-editable" data-id="${exp.id}" disabled>
-                            <option value="housing" ${exp.category === 'housing' ? 'selected' : ''}>Housing</option>
-                            <option value="food" ${exp.category === 'food' ? 'selected' : ''}>Food & Dining</option>
-                            <option value="transportation" ${exp.category === 'transportation' ? 'selected' : ''}>Transportation</option>
-                            <option value="entertainment" ${exp.category === 'entertainment' ? 'selected' : ''}>Entertainment</option>
-                            <option value="healthcare" ${exp.category === 'healthcare' ? 'selected' : ''}>Healthcare</option>
-                            <option value="shopping" ${exp.category === 'shopping' ? 'selected' : ''}>Shopping</option>
-                            <option value="utilities" ${exp.category === 'utilities' ? 'selected' : ''}>Utilities</option>
-                            <option value="other" ${exp.category === 'other' ? 'selected' : ''}>Other</option>
+                            ${getCategoryOptions(exp.category)}
                         </select>
                         <span>•</span>
                         <span>${new Date(exp.date).toLocaleDateString()}</span>
@@ -221,65 +199,70 @@ export const ExpenseTracker = {
             historyList.appendChild(row);
         });
 
-        // Attach event listeners to buttons after a slight delay
-        setTimeout(() => {
-            this.attachRowEventListeners();
-        }, 100);
+        this.setupEventDelegation();
     },
 
-    attachRowEventListeners() {
-        // Edit buttons
-        document.querySelectorAll('.edit-expense-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+    setupEventDelegation() {
+        const historyList = document.getElementById('expense-history-list');
+        if (!historyList || historyList.dataset.delegationSetup) return;
+        
+        historyList.dataset.delegationSetup = 'true';
+        
+        historyList.addEventListener('click', async (e) => {
+            const editBtn = e.target.closest('.edit-expense-btn');
+            const deleteBtn = e.target.closest('.delete-expense-btn');
+            
+            if (editBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                const id = btn.getAttribute('data-id');
+                const id = editBtn.getAttribute('data-id');
                 this.toggleEdit(id);
-            });
-        });
-
-        // Delete buttons
-        document.querySelectorAll('.delete-expense-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
+            }
+            
+            if (deleteBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                
-                if (confirm('Are you sure you want to delete this expense?')) {
-                    const id = btn.getAttribute('data-id');
-                    await this.deleteExpense(id);
-                }
-            });
+                const id = deleteBtn.getAttribute('data-id');
+                this.deleteExpense(id);
+            }
         });
     },
 
     async deleteExpense(id) {
+        const confirmed = await core.showConfirm(
+            'This action cannot be undone. Are you sure you want to delete this expense?',
+            'Delete Expense'
+        );
+        
+        if (!confirmed) return;
+        
         try {
             const user = core.getUser();
+            const expense = core.getExpenses().find(e => e.id === id);
+            const expenseName = expense ? expense.name : 'Expense';
             
             core.showSync();
             
-            // Delete from database if user is logged in
             if (user) {
                 await Database.deleteExpense(user.uid, id);
             }
             
-            // Update local cache
             let expenses = core.getExpenses().filter(exp => exp.id !== id);
             core.setExpenses(expenses);
             
             core.hideSync();
             
-            // Re-render expense tracker
             this.update();
             
-            // Update monthly chart
-            if (window.refreshMonthlyChartAfterExpenseChange) {
-                window.refreshMonthlyChartAfterExpenseChange();
+            if (window.updateMonthlyChart) {
+                window.updateMonthlyChart();
             }
+            
+            core.showSuccessToast(`Deleted "${expenseName}"`);
         } catch (error) {
             console.error('Error deleting expense:', error);
             core.hideSync();
-            alert('Failed to delete expense. Please try again.');
+            core.showErrorToast('Failed to delete expense. Please try again.');
         }
     },
 
@@ -288,10 +271,8 @@ export const ExpenseTracker = {
         if (!row) return;
         
         if (row.classList.contains('editing')) {
-            // SAVE MODE
             await this.saveEdit(id, row);
         } else {
-            // EDIT MODE
             this.enableEditMode(id, row);
         }
     },
@@ -302,13 +283,24 @@ export const ExpenseTracker = {
             const category = row.querySelector('.expense-category-editable').value;
             let amount = parseFloat(row.querySelector('.expense-amount-editable').value);
             
-            // Validation
-            if (!name || isNaN(amount) || amount <= 0) {
-                alert('Please enter valid expense details');
+            if (!name) {
+                core.showWarningToast('Expense name cannot be empty');
+                row.querySelector('.expense-name-editable').focus();
                 return;
             }
             
-            // Convert back to base currency if VND
+            if (!category) {
+                core.showWarningToast('Please select a category');
+                row.querySelector('.expense-category-editable').focus();
+                return;
+            }
+            
+            if (isNaN(amount) || amount <= 0) {
+                core.showWarningToast('Please enter a valid amount greater than 0');
+                row.querySelector('.expense-amount-editable').focus();
+                return;
+            }
+            
             if (core.getCurrency() === 'VND') {
                 amount *= 1000;
             }
@@ -317,12 +309,10 @@ export const ExpenseTracker = {
             
             core.showSync();
             
-            // Update in database if user is logged in
             if (user) {
                 await Database.updateExpense(user.uid, id, { name, category, amount });
             }
             
-            // Update local cache
             let expenses = core.getExpenses();
             const index = expenses.findIndex(e => e.id === id);
             if (index !== -1) {
@@ -332,23 +322,34 @@ export const ExpenseTracker = {
             
             core.hideSync();
             
-            // Re-render expense tracker
             this.update();
             
-            // Update monthly chart
-            if (window.refreshMonthlyChartAfterExpenseChange) {
-                window.refreshMonthlyChartAfterExpenseChange();
+            if (window.updateMonthlyChart) {
+                window.updateMonthlyChart();
             }
+            
+            core.showSuccessToast(`Updated "${name}"`);
         } catch (error) {
             console.error('Error updating expense:', error);
             core.hideSync();
-            alert('Failed to update expense. Please try again.');
+            core.showErrorToast('Failed to update expense. Please try again.');
         }
     },
 
     enableEditMode(id, row) {
-        // Cancel any other editing rows first
         document.querySelectorAll('.expense-history-item.editing').forEach(r => {
+            const originalId = r.getAttribute('data-id');
+            const originalExpense = core.getExpenses().find(e => e.id === originalId);
+            
+            if (originalExpense) {
+                r.querySelector('.expense-name-editable').value = originalExpense.name;
+                r.querySelector('.expense-category-editable').value = originalExpense.category;
+                const displayValue = core.getCurrency() === 'VND' 
+                    ? originalExpense.amount / 1000 
+                    : originalExpense.amount;
+                r.querySelector('.expense-amount-editable').value = displayValue;
+            }
+            
             r.classList.remove('editing');
             r.querySelectorAll('input').forEach(i => i.readOnly = true);
             r.querySelector('select').disabled = true;
@@ -360,67 +361,146 @@ export const ExpenseTracker = {
             `;
         });
         
-        // Enable editing for this row
         row.classList.add('editing');
         row.querySelectorAll('input').forEach(i => i.readOnly = false);
         row.querySelector('select').disabled = false;
         row.querySelector('.expense-amount-editable').style.display = 'block';
         row.querySelector('.expense-amount-display').style.display = 'none';
         
-        // Change edit icon to checkmark
         row.querySelector('.edit-expense-btn svg').innerHTML = `
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
         `;
         
-        // Focus on name input
         row.querySelector('.expense-name-editable').focus();
     },
 
-    renderStats(totalSpend, income) {
+    renderStats(totalSpend, income, categoryTotals) {
         const totalSpendEl = document.getElementById('total-monthly-spend');
         if (!totalSpendEl) return;
 
         totalSpendEl.textContent = core.formatCurrency(totalSpend);
         
-        // Income vs Expense bars
-        const maxAmount = Math.max(income, totalSpend);
-        const incomeBar = document.getElementById('income-bar');
-        const expenseBar = document.getElementById('expense-bar');
+        const spendProgressBar = document.getElementById('spend-progress-bar');
+        const spendProgressText = document.getElementById('spend-progress-text');
         
-        if (incomeBar) incomeBar.style.width = `${(income / maxAmount) * 100}%`;
-        if (expenseBar) expenseBar.style.width = `${(totalSpend / maxAmount) * 100}%`;
+        if (spendProgressBar && spendProgressText) {
+            const percent = income > 0 ? (totalSpend / income) * 100 : 0;
+            const cappedPercent = Math.min(percent, 100);
+            
+            spendProgressBar.style.width = `${cappedPercent}%`;
+            spendProgressText.textContent = `${percent.toFixed(1)}% of Income`;
+            
+            spendProgressBar.className = 'h-full rounded-full transition-all duration-500';
+            
+            if (percent < 70) {
+                spendProgressBar.classList.add('bg-emerald-500');
+            } else if (percent <= 95) {
+                spendProgressBar.classList.add('bg-amber-500');
+            } else {
+                spendProgressBar.classList.add('bg-red-500');
+            }
+        }
         
-        const incomeAmount = document.getElementById('income-amount');
-        const expenseAmount = document.getElementById('expense-amount');
-        
-        if (incomeAmount) incomeAmount.textContent = core.formatCurrency(income);
-        if (expenseAmount) expenseAmount.textContent = core.formatCurrency(totalSpend);
-        
-        // Safe-to-spend calculation
+        // ✅ NEW: Calculate Needs vs Wants breakdown
+        const needsInput = document.getElementById('input-needs');
+        const wantsInput = document.getElementById('input-wants');
         const savingsInput = document.getElementById('input-savings');
+        
+        const needsPercent = needsInput ? parseInt(needsInput.value) : 50;
+        const wantsPercent = wantsInput ? parseInt(wantsInput.value) : 30;
         const savingsPercent = savingsInput ? parseInt(savingsInput.value) : 20;
-        const safeToSpend = income - totalSpend - (income * savingsPercent / 100);
+
+        const needsBudget = income * (needsPercent / 100);
+        const wantsBudget = income * (wantsPercent / 100);
+        const savingsBudget = income * (savingsPercent / 100);
+
+        // Calculate actual spending by category type
+        let needsSpent = 0;
+        let wantsSpent = 0;
+        
+        if (categoryTotals) {
+            Object.keys(categoryTotals).forEach(category => {
+                const budgetType = getCategoryBudgetType(category);
+                if (budgetType === 'needs') {
+                    needsSpent += categoryTotals[category];
+                } else if (budgetType === 'wants') {
+                    wantsSpent += categoryTotals[category];
+                }
+            });
+        }
+
+        // ✅ Update Needs Progress Bar
+        const needsAmountEl = document.getElementById('needs-spent-amount');
+        const needsProgressBar = document.getElementById('needs-progress-bar');
+        const needsProgressFill = document.getElementById('needs-progress-fill');
+        const needsBudgetEl = document.getElementById('needs-budget-limit');
+        
+        if (needsAmountEl && needsProgressBar && needsProgressFill && needsBudgetEl) {
+            needsAmountEl.textContent = core.formatCurrency(needsSpent);
+            needsBudgetEl.textContent = core.formatCurrency(needsBudget);
+            
+            const needsProgressPercent = needsBudget > 0 ? Math.min((needsSpent / needsBudget) * 100, 100) : 0;
+            needsProgressFill.style.width = `${needsProgressPercent}%`;
+            
+            // Color coding
+            needsProgressFill.className = 'h-full rounded-full transition-all duration-500';
+            if (needsSpent > needsBudget) {
+                needsProgressFill.classList.add('bg-red-500');
+            } else if (needsSpent >= needsBudget * 0.9) {
+                needsProgressFill.classList.add('bg-amber-500');
+            } else {
+                needsProgressFill.classList.add('bg-emerald-500');
+            }
+        }
+
+        // ✅ Update Wants Progress Bar
+        const wantsAmountEl = document.getElementById('wants-spent-amount');
+        const wantsProgressBar = document.getElementById('wants-progress-bar');
+        const wantsProgressFill = document.getElementById('wants-progress-fill');
+        const wantsBudgetEl = document.getElementById('wants-budget-limit');
+        
+        if (wantsAmountEl && wantsProgressBar && wantsProgressFill && wantsBudgetEl) {
+            wantsAmountEl.textContent = core.formatCurrency(wantsSpent);
+            wantsBudgetEl.textContent = core.formatCurrency(wantsBudget);
+            
+            const wantsProgressPercent = wantsBudget > 0 ? Math.min((wantsSpent / wantsBudget) * 100, 100) : 0;
+            wantsProgressFill.style.width = `${wantsProgressPercent}%`;
+            
+            // Color coding
+            wantsProgressFill.className = 'h-full rounded-full transition-all duration-500';
+            if (wantsSpent > wantsBudget) {
+                wantsProgressFill.classList.add('bg-red-500');
+            } else if (wantsSpent >= wantsBudget * 0.9) {
+                wantsProgressFill.classList.add('bg-amber-500');
+            } else {
+                wantsProgressFill.classList.add('bg-blue-500');
+            }
+        }
+        
+        // ✅ Calculate Safe-to-Spend (updated logic)
+        const safeToSpend = (income - needsBudget - savingsBudget) - wantsSpent;
         
         const safeToSpendEl = document.getElementById('safe-to-spend');
         if (safeToSpendEl) {
             safeToSpendEl.textContent = core.formatCurrency(Math.max(0, safeToSpend));
         }
         
-        // Daily allowance
         const daysLeft = getDaysRemainingInMonth(this.state.selectedYear, this.state.selectedMonth);
         const dailyAllowance = document.getElementById('daily-allowance');
         const daysRemaining = document.getElementById('days-remaining');
         
         if (dailyAllowance) {
-            dailyAllowance.textContent = core.formatCurrency(safeToSpend > 0 ? safeToSpend / daysLeft : 0);
+            dailyAllowance.textContent = core.formatCurrency(safeToSpend > 0 && daysLeft > 0 ? safeToSpend / daysLeft : 0);
         }
         if (daysRemaining) {
-            daysRemaining.textContent = `${daysLeft} days left this month`;
+            daysRemaining.textContent = daysLeft > 0 
+                ? `${daysLeft} days left this month` 
+                : 'Month has ended';
         }
     },
 
-    renderDonutChart(categoryTotals, totalSpend, income) {
+    renderDonutChart(categoryTotals, totalSpend, income, expenses) {
         const innerSegments = document.getElementById('donut-inner-segments');
         const outerSegments = document.getElementById('donut-outer-segments');
         const legend = document.getElementById('category-legend');
@@ -441,88 +521,128 @@ export const ExpenseTracker = {
             return;
         }
         
-        // Sort categories by spending
         const categories = Object.keys(categoryTotals).sort((a, b) => categoryTotals[b] - categoryTotals[a]);
         
-        let startInnerAngle = 0;
-        let startOuterAngle = 0;
+        let currentAngle = 0;
         
-        categories.forEach((category, index) => {
-            const spend = categoryTotals[category];
-            const percent = (spend / totalSpend) * 100;
-            const color = getCategoryColor(category); // ✅ Use fixed color
+        categories.forEach((category) => {
+            const catSpend = categoryTotals[category];
+            const catSweep = (catSpend / totalSpend) * 360;
+            const color = getCategoryColor(category);
             
-            // Determine budget category
-            const needsCategories = ['housing', 'food', 'transportation', 'healthcare', 'utilities'];
-            const wantsCategories = ['entertainment', 'shopping', 'other'];
+            // 1. Draw Inner Ring (Main Category)
+            if (catSweep > 0) {
+                const innerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                innerPath.setAttribute('d', describeArc(180, 180, 100, currentAngle, currentAngle + catSweep));
+                innerPath.setAttribute('fill', 'none');
+                innerPath.setAttribute('stroke', color);
+                innerPath.setAttribute('stroke-width', 40);
+                
+                // ✅ Add classes for hover effect
+                innerPath.classList.add('donut-segment');
+                innerPath.setAttribute('data-category', category);
+                
+                innerSegments.appendChild(innerPath);
+            }
+
+            // 2. Draw Outer Ring (Individual Expenses / Sub-categories)
+            const catExpenses = expenses.filter(e => e.category === category).sort((a, b) => b.amount - a.amount);
+            let outerAngle = currentAngle;
+
+            catExpenses.forEach((exp, index) => {
+                const expSweep = (exp.amount / totalSpend) * 360;
+                
+                if (expSweep > 0) {
+                    const opacity = 1 - (index % 3) * 0.25; 
+                    
+                    const outerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    outerPath.setAttribute('d', describeArc(180, 180, 145, outerAngle, outerAngle + expSweep));
+                    outerPath.setAttribute('fill', 'none');
+                    outerPath.setAttribute('stroke', color);
+                    outerPath.setAttribute('stroke-width', 30);
+                    outerPath.style.opacity = opacity.toString();
+                    
+                    // ✅ Add classes for hover effect
+                    outerPath.classList.add('donut-segment');
+                    outerPath.setAttribute('data-category', category);
+                    
+                    outerSegments.appendChild(outerPath);
+                    
+                    outerAngle += expSweep;
+                }
+            });
+
+            currentAngle += catSweep;
             
+            // 3. Render Legend
+            const budgetType = getCategoryBudgetType(category);
             let budgetPercent = 0;
             const needsInput = document.getElementById('input-needs');
             const wantsInput = document.getElementById('input-wants');
             
-            if (needsCategories.includes(category.toLowerCase()) && needsInput) {
-                budgetPercent = parseInt(needsInput.value);
-            } else if (wantsCategories.includes(category.toLowerCase()) && wantsInput) {
-                budgetPercent = parseInt(wantsInput.value);
+            if (budgetType === 'needs' && needsInput) {
+                const needsTotal = parseInt(needsInput.value);
+                const needsCount = categories.filter(c => getCategoryBudgetType(c) === 'needs').length;
+                budgetPercent = needsCount > 0 ? needsTotal / needsCount : 0; 
+            } else if (budgetType === 'wants' && wantsInput) {
+                const wantsTotal = parseInt(wantsInput.value);
+                const wantsCount = categories.filter(c => getCategoryBudgetType(c) === 'wants').length;
+                budgetPercent = wantsCount > 0 ? wantsTotal / wantsCount : 0; 
             }
             
             const budgetAmount = income * budgetPercent / 100;
             
-            // Draw inner ring (actual spending)
-            const innerSweep = (percent / 100) * 360;
-            const innerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            innerPath.setAttribute('d', describeArc(180, 180, 100, startInnerAngle, startInnerAngle + innerSweep));
-            innerPath.setAttribute('fill', 'none');
-            innerPath.setAttribute('stroke', color);
-            innerPath.setAttribute('stroke-width', 40);
-            innerSegments.appendChild(innerPath);
-            startInnerAngle += innerSweep;
-            
-            // Draw outer ring (budget) if budget exists
-            if (budgetAmount > 0) {
-                const budgetSweep = (budgetAmount / income) * 360;
-                const outerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                outerPath.setAttribute('d', describeArc(180, 180, 145, startOuterAngle, startOuterAngle + budgetSweep));
-                outerPath.setAttribute('fill', 'none');
-                outerPath.setAttribute('stroke', color);
-                outerPath.setAttribute('stroke-width', 30);
-                outerPath.style.opacity = '0.4';
-                outerSegments.appendChild(outerPath);
-                startOuterAngle += budgetSweep;
-            }
-            
-            // Determine budget status
             let budgetStatus = 'under-budget';
-            if (spend > budgetAmount) {
+            if (catSpend > budgetAmount) {
                 budgetStatus = 'over-budget';
-            } else if (spend >= budgetAmount * 0.9) {
+            } else if (catSpend >= budgetAmount * 0.9) {
                 budgetStatus = 'at-budget';
             }
             
-            const progressPercent = budgetAmount > 0 ? Math.min((spend / budgetAmount) * 100, 100) : 0;
+            const progressPercent = budgetAmount > 0 ? Math.min((catSpend / budgetAmount) * 100, 100) : 0;
+            const displayLabel = getCategoryLabel(category);
+            const percentOfTotal = (catSpend / totalSpend) * 100;
             
-            // Create legend item
             const legendItem = document.createElement('div');
             legendItem.className = 'legend-item';
+            
             legendItem.innerHTML = `
                 <div class="legend-item-header">
                     <div class="legend-color" style="background: ${color};"></div>
-                    <div class="legend-text">${category}</div>
-                    <div class="legend-percentage">${percent.toFixed(1)}%</div>
-                    <div class="legend-amount">${core.formatCurrency(spend)}</div>
+                    <div class="legend-text">${displayLabel}</div>
+                    <div class="legend-percentage">${percentOfTotal.toFixed(1)}%</div>
+                    <div class="legend-amount">${core.formatCurrency(catSpend)}</div>
                 </div>
                 ${budgetAmount > 0 ? `
                     <div class="budget-progress">
                         <div class="budget-progress-bar">
                             <div class="budget-progress-fill ${budgetStatus}" style="width: ${progressPercent}%;"></div>
                         </div>
-                        <div class="budget-info">
-                            <span class="budget-spent">${core.formatCurrency(spend)} spent</span>
-                            <span class="budget-limit">${core.formatCurrency(budgetAmount)} budget</span>
+                        <div class="budget-info" style="justify-content: flex-end;">
+                            <span class="budget-limit">Limit: ${core.formatCurrency(budgetAmount)}</span>
                         </div>
                     </div>
                 ` : ''}
             `;
+            
+            // ✅ Add Hover Events to trigger the glow
+            legendItem.addEventListener('mouseenter', () => {
+                document.querySelectorAll('.donut-segment').forEach(segment => {
+                    if (segment.getAttribute('data-category') === category) {
+                        segment.classList.add('glow');
+                        segment.classList.remove('dim');
+                    } else {
+                        segment.classList.add('dim');
+                        segment.classList.remove('glow');
+                    }
+                });
+            });
+
+            legendItem.addEventListener('mouseleave', () => {
+                document.querySelectorAll('.donut-segment').forEach(segment => {
+                    segment.classList.remove('glow', 'dim');
+                });
+            });
             
             legend.appendChild(legendItem);
         });
