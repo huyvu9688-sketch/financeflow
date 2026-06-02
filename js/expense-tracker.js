@@ -1,8 +1,11 @@
+// expense-tracker.js
 import { Database } from './database.js';
 import { getCategoryOptions, getCategoryColor, getCategoryBudgetType, getCategoryLabel } from './constants.js';
 import { escapeHtml, getDaysRemainingInMonth } from './utils.js';
 
-
+// ===================================
+// HELPER FUNCTIONS FOR DONUT CHART
+// ===================================
 function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
     const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
     return {
@@ -21,9 +24,19 @@ function describeArc(x, y, radius, startAngle, endAngle) {
     return ["M", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y].join(" ");
 }
 
-// Core API reference
+// ===================================
+// STATE MANAGEMENT
+// ===================================
 let core = {};
 
+// ✅ PAGINATION STATE (Virtual Scrolling)
+const ITEMS_PER_PAGE = 50;
+let currentPage = 1;
+let allFilteredExpenses = [];
+
+// ===================================
+// EXPENSE TRACKER MODULE
+// ===================================
 export const ExpenseTracker = {
     state: {
         selectedMonth: new Date().getMonth(),
@@ -32,6 +45,9 @@ export const ExpenseTracker = {
         currentSearchTerm: ''
     },
 
+    // ===================================
+    // INITIALIZATION
+    // ===================================
     init(coreFunctions) {
         core = coreFunctions;
         
@@ -43,6 +59,7 @@ export const ExpenseTracker = {
             return;
         }
 
+        // Populate category filter
         const categoryFilter = document.getElementById('category-filter');
         if (categoryFilter) {
             categoryFilter.innerHTML = `
@@ -51,6 +68,7 @@ export const ExpenseTracker = {
             `;
         }
 
+        // ✅ OPTIMIZED: Debounced search (300ms)
         const searchInput = document.getElementById('expense-search');
         if (searchInput) {
             let searchTimeout;
@@ -63,6 +81,7 @@ export const ExpenseTracker = {
             });
         }
 
+        // Category filter
         if (categoryFilter) {
             categoryFilter.addEventListener('change', (e) => {
                 this.state.currentFilter = e.target.value;
@@ -70,6 +89,7 @@ export const ExpenseTracker = {
             });
         }
 
+        // Month picker
         const monthPicker = document.getElementById('month-picker');
         if (monthPicker) {
             monthPicker.value = `${this.state.selectedYear}-${String(this.state.selectedMonth + 1).padStart(2, '0')}`;
@@ -78,6 +98,7 @@ export const ExpenseTracker = {
                 this.state.selectedYear = parseInt(year);
                 this.state.selectedMonth = parseInt(month) - 1;
                 
+                // Update month label
                 const monthLabel = document.getElementById('current-month');
                 if (monthLabel) {
                     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
@@ -85,6 +106,7 @@ export const ExpenseTracker = {
                     monthLabel.textContent = monthNames[this.state.selectedMonth];
                 }
                 
+                // Update modal label
                 const modalLabel = document.getElementById('total-spend-label');
                 if (modalLabel) {
                     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
@@ -96,12 +118,14 @@ export const ExpenseTracker = {
             });
         }
 
+        // Modal trigger
         trackingCard.addEventListener('click', () => {
             expModal.classList.add('active');
             document.body.style.overflow = 'hidden';
             this.update();
         });
 
+        // Close button
         const closeBtn = document.getElementById('close-expense-modal');
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
@@ -111,20 +135,31 @@ export const ExpenseTracker = {
         }
     },
 
+    // ===================================
+    // UPDATE - MAIN RENDER TRIGGER
+    // ===================================
     update() {
-        const expenses = core.getExpenses();
+        currentPage = 1; // ✅ Reset pagination
+        
         const income = core.getIncome();
         
-        const filtered = expenses.filter(exp => {
-            const expDate = new Date(exp.date);
-            return expDate.getMonth() === this.state.selectedMonth && 
-                   expDate.getFullYear() === this.state.selectedYear;
-        }).filter(exp => {
+        // ✅ OPTIMIZED: Use month index instead of filtering all expenses
+        let filtered = core.getExpensesByMonth 
+            ? core.getExpensesByMonth(this.state.selectedYear, this.state.selectedMonth)
+            : core.getExpenses().filter(exp => {
+                const expDate = new Date(exp.date);
+                return expDate.getMonth() === this.state.selectedMonth && 
+                       expDate.getFullYear() === this.state.selectedYear;
+              });
+        
+        // Apply search and category filters
+        filtered = filtered.filter(exp => {
             const matchesSearch = exp.name.toLowerCase().includes(this.state.currentSearchTerm);
             const matchesCategory = this.state.currentFilter === 'all' || exp.category === this.state.currentFilter;
             return matchesSearch && matchesCategory;
         });
         
+        // Calculate category totals
         const categoryTotals = {};
         let totalSpend = 0;
         
@@ -136,25 +171,43 @@ export const ExpenseTracker = {
             totalSpend += exp.amount;
         });
         
+        // Render all components
         this.renderHistoryList(filtered);
-        // ✅ We added 'filtered' to the end of this line
         this.renderDonutChart(categoryTotals, totalSpend, income, filtered);
         this.renderStats(totalSpend, income, categoryTotals); 
     },
 
+    // ===================================
+    // RENDER HISTORY LIST (Virtual Scrolling)
+    // ===================================
     renderHistoryList(expenses) {
         const historyList = document.getElementById('expense-history-list');
         if (!historyList) return;
 
+        allFilteredExpenses = expenses;
+        
         if (expenses.length === 0) {
             historyList.innerHTML = '<div class="text-center text-zinc-500 text-sm py-8">No expenses found</div>';
             return;
         }
         
-        historyList.innerHTML = '';
+        // ✅ OPTIMIZED: Only render up to current page
+        const endIndex = Math.min(ITEMS_PER_PAGE * currentPage, expenses.length);
+        const visibleExpenses = expenses.slice(0, endIndex);
+        
+        // Clear list only on first page
+        if (currentPage === 1) {
+            historyList.innerHTML = '';
+        }
+        
         const currency = core.getCurrency();
         
-        expenses.forEach(exp => {
+        visibleExpenses.forEach(exp => {
+            // Skip if already rendered
+            if (document.querySelector(`[data-id="${exp.id}"]`)) {
+                return;
+            }
+            
             const displayInputValue = currency === 'VND' ? exp.amount / 1000 : exp.amount;
             const formattedAmount = core.formatNumber(exp.amount);
             
@@ -198,10 +251,50 @@ export const ExpenseTracker = {
             
             historyList.appendChild(row);
         });
-
+        
+        // ✅ Add/update "Load More" button
+        this.renderLoadMoreButton(historyList, expenses.length, endIndex);
+        
         this.setupEventDelegation();
     },
 
+    // ===================================
+    // RENDER LOAD MORE BUTTON
+    // ===================================
+    renderLoadMoreButton(container, totalCount, loadedCount) {
+        // Remove existing button/message
+        const existingBtn = container.querySelector('.load-more-btn');
+        const existingMsg = container.querySelector('.all-loaded-msg');
+        if (existingBtn) existingBtn.remove();
+        if (existingMsg) existingMsg.remove();
+        
+        if (loadedCount < totalCount) {
+            // Show "Load More" button
+            const button = document.createElement('button');
+            button.className = 'load-more-btn w-full py-3 text-sm text-emerald-400 hover:text-emerald-300 transition-colors border-t border-zinc-800 mt-2 font-mono';
+            button.innerHTML = `
+                <div class="flex items-center justify-center gap-2">
+                    <iconify-icon icon="solar:refresh-linear"></iconify-icon>
+                    <span>Load More (${loadedCount} of ${totalCount})</span>
+                </div>
+            `;
+            button.onclick = () => {
+                currentPage++;
+                this.renderHistoryList(allFilteredExpenses);
+            };
+            container.appendChild(button);
+        } else if (totalCount > ITEMS_PER_PAGE) {
+            // Show "All loaded" message
+            const message = document.createElement('div');
+            message.className = 'all-loaded-msg w-full py-2 text-xs text-zinc-600 text-center border-t border-zinc-800 mt-2 font-mono';
+            message.textContent = `All ${totalCount} expenses loaded`;
+            container.appendChild(message);
+        }
+    },
+
+    // ===================================
+    // EVENT DELEGATION FOR EXPENSE ACTIONS
+    // ===================================
     setupEventDelegation() {
         const historyList = document.getElementById('expense-history-list');
         if (!historyList || historyList.dataset.delegationSetup) return;
@@ -228,6 +321,9 @@ export const ExpenseTracker = {
         });
     },
 
+    // ===================================
+    // DELETE EXPENSE
+    // ===================================
     async deleteExpense(id) {
         const confirmed = await core.showConfirm(
             'This action cannot be undone. Are you sure you want to delete this expense?',
@@ -266,6 +362,9 @@ export const ExpenseTracker = {
         }
     },
 
+    // ===================================
+    // TOGGLE EDIT MODE
+    // ===================================
     async toggleEdit(id) {
         const row = document.querySelector(`.expense-history-item[data-id="${id}"]`);
         if (!row) return;
@@ -277,6 +376,9 @@ export const ExpenseTracker = {
         }
     },
 
+    // ===================================
+    // SAVE EDITED EXPENSE
+    // ===================================
     async saveEdit(id, row) {
         try {
             const name = row.querySelector('.expense-name-editable').value.trim();
@@ -336,7 +438,11 @@ export const ExpenseTracker = {
         }
     },
 
+    // ===================================
+    // ENABLE EDIT MODE
+    // ===================================
     enableEditMode(id, row) {
+        // Disable all other editing rows
         document.querySelectorAll('.expense-history-item.editing').forEach(r => {
             const originalId = r.getAttribute('data-id');
             const originalExpense = core.getExpenses().find(e => e.id === originalId);
@@ -361,12 +467,14 @@ export const ExpenseTracker = {
             `;
         });
         
+        // Enable this row
         row.classList.add('editing');
         row.querySelectorAll('input').forEach(i => i.readOnly = false);
         row.querySelector('select').disabled = false;
         row.querySelector('.expense-amount-editable').style.display = 'block';
         row.querySelector('.expense-amount-display').style.display = 'none';
         
+        // Change edit button to checkmark
         row.querySelector('.edit-expense-btn svg').innerHTML = `
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
@@ -375,12 +483,16 @@ export const ExpenseTracker = {
         row.querySelector('.expense-name-editable').focus();
     },
 
+    // ===================================
+    // RENDER STATS (Total Spend, Needs/Wants, Safe-to-Spend)
+    // ===================================
     renderStats(totalSpend, income, categoryTotals) {
         const totalSpendEl = document.getElementById('total-monthly-spend');
         if (!totalSpendEl) return;
 
         totalSpendEl.textContent = core.formatCurrency(totalSpend);
         
+        // Update total spend progress bar
         const spendProgressBar = document.getElementById('spend-progress-bar');
         const spendProgressText = document.getElementById('spend-progress-text');
         
@@ -402,7 +514,7 @@ export const ExpenseTracker = {
             }
         }
         
-        // ✅ NEW: Calculate Needs vs Wants breakdown
+        // Get budget percentages
         const needsInput = document.getElementById('input-needs');
         const wantsInput = document.getElementById('input-wants');
         const savingsInput = document.getElementById('input-savings');
@@ -415,7 +527,7 @@ export const ExpenseTracker = {
         const wantsBudget = income * (wantsPercent / 100);
         const savingsBudget = income * (savingsPercent / 100);
 
-        // Calculate actual spending by category type
+        // ✅ Calculate actual spending by budget type
         let needsSpent = 0;
         let wantsSpent = 0;
         
@@ -430,20 +542,18 @@ export const ExpenseTracker = {
             });
         }
 
-        // ✅ Update Needs Progress Bar
+        // Update Needs Progress Bar
         const needsAmountEl = document.getElementById('needs-spent-amount');
-        const needsProgressBar = document.getElementById('needs-progress-bar');
         const needsProgressFill = document.getElementById('needs-progress-fill');
         const needsBudgetEl = document.getElementById('needs-budget-limit');
         
-        if (needsAmountEl && needsProgressBar && needsProgressFill && needsBudgetEl) {
+        if (needsAmountEl && needsProgressFill && needsBudgetEl) {
             needsAmountEl.textContent = core.formatCurrency(needsSpent);
             needsBudgetEl.textContent = core.formatCurrency(needsBudget);
             
             const needsProgressPercent = needsBudget > 0 ? Math.min((needsSpent / needsBudget) * 100, 100) : 0;
             needsProgressFill.style.width = `${needsProgressPercent}%`;
             
-            // Color coding
             needsProgressFill.className = 'h-full rounded-full transition-all duration-500';
             if (needsSpent > needsBudget) {
                 needsProgressFill.classList.add('bg-red-500');
@@ -454,20 +564,18 @@ export const ExpenseTracker = {
             }
         }
 
-        // ✅ Update Wants Progress Bar
+        // Update Wants Progress Bar
         const wantsAmountEl = document.getElementById('wants-spent-amount');
-        const wantsProgressBar = document.getElementById('wants-progress-bar');
         const wantsProgressFill = document.getElementById('wants-progress-fill');
         const wantsBudgetEl = document.getElementById('wants-budget-limit');
         
-        if (wantsAmountEl && wantsProgressBar && wantsProgressFill && wantsBudgetEl) {
+        if (wantsAmountEl && wantsProgressFill && wantsBudgetEl) {
             wantsAmountEl.textContent = core.formatCurrency(wantsSpent);
             wantsBudgetEl.textContent = core.formatCurrency(wantsBudget);
             
             const wantsProgressPercent = wantsBudget > 0 ? Math.min((wantsSpent / wantsBudget) * 100, 100) : 0;
             wantsProgressFill.style.width = `${wantsProgressPercent}%`;
             
-            // Color coding
             wantsProgressFill.className = 'h-full rounded-full transition-all duration-500';
             if (wantsSpent > wantsBudget) {
                 wantsProgressFill.classList.add('bg-red-500');
@@ -478,7 +586,7 @@ export const ExpenseTracker = {
             }
         }
         
-        // ✅ Calculate Safe-to-Spend (updated logic)
+        // Calculate Safe-to-Spend
         const safeToSpend = (income - needsBudget - savingsBudget) - wantsSpent;
         
         const safeToSpendEl = document.getElementById('safe-to-spend');
@@ -486,6 +594,7 @@ export const ExpenseTracker = {
             safeToSpendEl.textContent = core.formatCurrency(Math.max(0, safeToSpend));
         }
         
+        // Update Daily Allowance
         const daysLeft = getDaysRemainingInMonth(this.state.selectedYear, this.state.selectedMonth);
         const dailyAllowance = document.getElementById('daily-allowance');
         const daysRemaining = document.getElementById('days-remaining');
@@ -500,6 +609,9 @@ export const ExpenseTracker = {
         }
     },
 
+    // ===================================
+    // RENDER DONUT CHART
+    // ===================================
     renderDonutChart(categoryTotals, totalSpend, income, expenses) {
         const innerSegments = document.getElementById('donut-inner-segments');
         const outerSegments = document.getElementById('donut-outer-segments');
@@ -530,22 +642,19 @@ export const ExpenseTracker = {
             const catSweep = (catSpend / totalSpend) * 360;
             const color = getCategoryColor(category);
             
-            // 1. Draw Inner Ring (Main Category)
+            // Draw Inner Ring (Main Category)
             if (catSweep > 0) {
                 const innerPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 innerPath.setAttribute('d', describeArc(180, 180, 100, currentAngle, currentAngle + catSweep));
                 innerPath.setAttribute('fill', 'none');
                 innerPath.setAttribute('stroke', color);
                 innerPath.setAttribute('stroke-width', 40);
-                
-                // ✅ Add classes for hover effect
                 innerPath.classList.add('donut-segment');
                 innerPath.setAttribute('data-category', category);
-                
                 innerSegments.appendChild(innerPath);
             }
 
-            // 2. Draw Outer Ring (Individual Expenses / Sub-categories)
+            // Draw Outer Ring (Individual Expenses)
             const catExpenses = expenses.filter(e => e.category === category).sort((a, b) => b.amount - a.amount);
             let outerAngle = currentAngle;
 
@@ -561,11 +670,8 @@ export const ExpenseTracker = {
                     outerPath.setAttribute('stroke', color);
                     outerPath.setAttribute('stroke-width', 30);
                     outerPath.style.opacity = opacity.toString();
-                    
-                    // ✅ Add classes for hover effect
                     outerPath.classList.add('donut-segment');
                     outerPath.setAttribute('data-category', category);
-                    
                     outerSegments.appendChild(outerPath);
                     
                     outerAngle += expSweep;
@@ -574,7 +680,7 @@ export const ExpenseTracker = {
 
             currentAngle += catSweep;
             
-            // 3. Render Legend
+            // Render Legend
             const budgetType = getCategoryBudgetType(category);
             let budgetPercent = 0;
             const needsInput = document.getElementById('input-needs');
@@ -625,7 +731,7 @@ export const ExpenseTracker = {
                 ` : ''}
             `;
             
-            // ✅ Add Hover Events to trigger the glow
+            // Add hover effects
             legendItem.addEventListener('mouseenter', () => {
                 document.querySelectorAll('.donut-segment').forEach(segment => {
                     if (segment.getAttribute('data-category') === category) {
