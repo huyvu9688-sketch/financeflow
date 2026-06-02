@@ -412,3 +412,39 @@ input[type=range].adjusting {
     color: #10b981;
     font-weight: 600;
 }
+/* ===================================
+   INCOME INPUT ENHANCEMENTS
+   =================================== */
+.editable-value {
+    background: transparent; 
+    border: 1px solid transparent; 
+    color: #10b981; 
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem; 
+    text-align: right; 
+    outline: none; 
+    padding: 4px 8px; 
+    border-radius: 4px; 
+    transition: all 0.2s; /* ✅ Added for smooth animations */
+    cursor: pointer; 
+    min-width: 60px; 
+    pointer-events: auto; 
+    z-index: 100; 
+    position: relative;
+}
+
+.editable-value:hover { 
+    background: rgba(16, 185, 129, 0.1); 
+    border-color: rgba(16, 185, 129, 0.3); 
+}
+
+.editable-value:focus { 
+    background: rgba(16, 185, 129, 0.15); 
+    border-color: #10b981; 
+    cursor: text; 
+}
+
+/* ✅ NEW: Scale animation on Enter press */
+.editable-value:active {
+    transform: scale(0.98);
+}
