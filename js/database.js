@@ -67,13 +67,39 @@ export const Database = {
     },
 
     async saveMonthlyBudget(userId, monthKey, budget, currency) {
-        const dataToSave = {
-            [`monthlyBudgets.${monthKey}`]: budget,
-            currency: currency,
-            updatedAt: new Date()
-        };
+        console.log('💾 Saving budget to Firebase:', {
+            userId,
+            monthKey,
+            budget,
+            currency
+        });
         
-        await setDoc(doc(db, 'users', userId), dataToSave, { merge: true });
+        try {
+            // ✅ Save the entire monthlyBudgets object, not just one month
+            const userRef = doc(db, 'users', userId);
+            
+            // Get current data first
+            const userDoc = await getDoc(userRef);
+            const currentData = userDoc.exists() ? userDoc.data() : {};
+            
+            // Update monthlyBudgets
+            const monthlyBudgets = currentData.monthlyBudgets || {};
+            monthlyBudgets[monthKey] = budget;
+            
+            // Save back
+            await setDoc(userRef, {
+                monthlyBudgets: monthlyBudgets,
+                currency: currency,
+                updatedAt: new Date()
+            }, { merge: true });
+            
+            console.log('✅ Budget saved successfully to Firebase');
+            console.log('📊 Current monthlyBudgets in Firebase:', monthlyBudgets);
+            
+        } catch (error) {
+            console.error('❌ Failed to save budget:', error);
+            throw error;
+        }
     },
 
     async saveSinkingFunds(userId, sinkingFunds, fundAllocations) {
