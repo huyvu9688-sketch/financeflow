@@ -36,36 +36,23 @@ export const BudgetPlanner = {
             return;
         }
 
-        // Modal trigger
         this.setupModalTrigger(modal);
-        
-        // Close button
         this.setupCloseButton(modal);
-        
-        // Fund form submission
         this.setupFundForm();
-        
-        // Fund list interactions (edit, delete, select)
         this.setupFundListDelegation(modal);
-        
-        // Simulation controls
         this.setupSimulationControls(modal);
-        
-        // Month picker change listener
         this.setupMonthPickerListener();
     },
 
     setupModalTrigger(modal) {
         const trigger = document.getElementById('budget-planning-trigger');
         if (trigger) {
-            trigger.addEventListener('click', async () => {  // ✅ Make it async
+            trigger.addEventListener('click', async () => {
                 modal.classList.add('active');
                 document.body.style.overflow = 'hidden';
                 
-                // ✅ Clean up orphaned allocations first
                 await this.cleanupOrphanedAllocations();
                 
-                // Auto-select first fund if none selected
                 if (!selectedFundId && customFunds.length > 0) {
                     selectedFundId = customFunds[0].id;
                 }
@@ -112,7 +99,6 @@ export const BudgetPlanner = {
             const months = parseInt(document.getElementById('cf-months').value);
             const amount = parseFloat(document.getElementById('cf-amount').value);
 
-            // Validation
             if (!this.validateFundInput(name, months, amount)) return;
 
             try {
@@ -278,32 +264,25 @@ export const BudgetPlanner = {
         document.getElementById('cf-name').focus();
     },
 
-    // Add this new method to BudgetPlanner object (around line 280)
     async cleanupOrphanedAllocations() {
         if (!core.getUser || !core.getUser()) return;
         
-        // Get list of valid fund IDs
         const validFundIds = customFunds.map(f => f.id);
-        
-        // Find orphaned allocations
         const orphanedIds = Object.keys(simulatedData).filter(id => !validFundIds.includes(id));
         
         if (orphanedIds.length > 0) {
             console.log('🧹 Cleaning up orphaned allocations:', orphanedIds);
             
-            // Remove orphaned allocations
             orphanedIds.forEach(id => {
                 delete simulatedData[id];
             });
             
-            // Save to Firebase
             await this.saveFunds();
             
             if (core.showInfoToast) {
                 core.showInfoToast(`Cleaned up ${orphanedIds.length} orphaned allocation(s)`);
             }
             
-            // Refresh UI
             this.updateSavingsGoalBox();
         }
     },
@@ -323,12 +302,9 @@ export const BudgetPlanner = {
 
         try {
             customFunds = customFunds.filter(f => f.id !== fundId);
-            
-            // ✅ DELETE ALLOCATIONS
             delete simulatedData[fundId];
             
             console.log('🗑️ Deleted fund and allocations:', fundId);
-            console.log('Remaining allocations:', simulatedData);
             
             if (selectedFundId === fundId) {
                 selectedFundId = customFunds.length > 0 ? customFunds[0].id : null;
@@ -384,7 +360,7 @@ export const BudgetPlanner = {
     },
 
     // ===============================
-    // DATA ACCESSORS (for export)
+    // DATA ACCESSORS
     // ===============================
     setFunds(funds) {
         customFunds = funds || [];
@@ -508,17 +484,26 @@ export const BudgetPlanner = {
                 selectedMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             }
             
+            console.log('💰 Calculating savings for month:', selectedMonthStr);
+            console.log('💵 Income:', income);
+            
             // Get budget percentages
             const { needsPercent, wantsPercent, savingsPercent } = this.getBudgetPercentages();
             const needsBudget = income * (needsPercent / 100);
             const wantsBudget = income * (wantsPercent / 100);
             const savingsBudget = income * (savingsPercent / 100);
             
+            console.log('📊 Budget breakdown:', { needsBudget, wantsBudget, savingsBudget });
+            
             // Calculate expenses by category type
             const { needsSpent, wantsSpent } = this.calculateMonthlySpending(selectedMonthStr);
             
+            console.log('💸 Spending:', { needsSpent, wantsSpent });
+            
             // Calculate fund allocations
             const totalAllocatedThisMonth = this.calculateFundAllocations(selectedMonthStr);
+            
+            console.log('🏦 Fund allocations:', totalAllocatedThisMonth);
             
             // Calculate available savings budget
             const totalNeedsWantsBudget = needsBudget + wantsBudget;
@@ -527,11 +512,9 @@ export const BudgetPlanner = {
             let availableSavingsBudget = 0;
             
             if (totalNeedsWantsSpent <= totalNeedsWantsBudget) {
-                // ✅ SCENARIO 1: Under budget
                 availableSavingsBudget = savingsBudget - totalAllocatedThisMonth;
                 console.log(`✅ Under budget: ${savingsBudget} - ${totalAllocatedThisMonth} = ${availableSavingsBudget}`);
             } else {
-                // ❌ SCENARIO 2: Over budget
                 const overBudgetAmount = totalNeedsWantsSpent - totalNeedsWantsBudget;
                 availableSavingsBudget = savingsBudget - overBudgetAmount - totalAllocatedThisMonth;
                 console.log(`❌ Over budget by ${overBudgetAmount}: ${savingsBudget} - ${overBudgetAmount} - ${totalAllocatedThisMonth} = ${availableSavingsBudget}`);
@@ -567,6 +550,7 @@ export const BudgetPlanner = {
         };
     },
 
+    // ✅ FIXED: Proper currency handling
     calculateMonthlySpending(selectedMonthStr) {
         const expenses = core.getExpenses ? core.getExpenses() : [];
         const [year, month] = selectedMonthStr.split('-');
@@ -574,6 +558,9 @@ export const BudgetPlanner = {
         
         let needsSpent = 0;
         let wantsSpent = 0;
+        
+        console.log('💰 Calculating spending for', selectedMonthStr, 'in', currentCurrency);
+        console.log('📊 Total expenses to check:', expenses.length);
         
         for (const exp of expenses) {
             const expDate = new Date(exp.date);
@@ -584,9 +571,24 @@ export const BudgetPlanner = {
                 let amount = exp.amount;
                 const expenseCurrency = exp.currency || currentCurrency;
                 
-                // Convert currency if needed
-                if (expenseCurrency !== currentCurrency && typeof window !== 'undefined' && window.convertCurrency) {
-                    amount = window.convertCurrency(amount, expenseCurrency, currentCurrency);
+                console.log('📝 Expense:', exp.name, 'Amount:', amount, 'Currency:', expenseCurrency);
+                
+                // ✅ CRITICAL FIX: Only convert if currencies are DIFFERENT
+                if (expenseCurrency !== currentCurrency) {
+                    // Use core.convertCurrency if available
+                    if (core.convertCurrency) {
+                        const convertedAmount = core.convertCurrency(amount, expenseCurrency, currentCurrency);
+                        console.log('  💱 Converted from', amount, expenseCurrency, 'to', convertedAmount, currentCurrency);
+                        amount = convertedAmount;
+                    } else if (typeof window !== 'undefined' && window.convertCurrency) {
+                        const convertedAmount = window.convertCurrency(amount, expenseCurrency, currentCurrency);
+                        console.log('  💱 Converted from', amount, expenseCurrency, 'to', convertedAmount, currentCurrency);
+                        amount = convertedAmount;
+                    } else {
+                        console.warn('  ⚠️ No currency converter available, using raw amount');
+                    }
+                } else {
+                    console.log('  ✅ Same currency, no conversion needed');
                 }
                 
                 // Categorize by budget type
@@ -597,8 +599,12 @@ export const BudgetPlanner = {
                 } else if (budgetType === 'wants') {
                     wantsSpent += amount;
                 }
+                
+                console.log('  ✅ Added to', budgetType, '- Running totals: Needs:', needsSpent, 'Wants:', wantsSpent);
             }
         }
+        
+        console.log('💸 Final spending:', { needsSpent, wantsSpent });
         
         return { needsSpent, wantsSpent };
     },
@@ -724,17 +730,13 @@ export const BudgetPlanner = {
             window.budgetChart.destroy();
         }
 
-        // Setup month range
         const { startDate, endDate, startMonthStr, endMonthStr } = this.getFundDateRange(fund);
         this.configureDatePicker(startMonthStr, endMonthStr);
 
-        // Prepare chart data
         const { labels, expectedData, actualData, monthKeys, totalSaved } = this.prepareChartData(fund, startDate);
 
-        // Update progress circle
         this.updateProgressCircle(totalSaved, fund.amount);
 
-        // Render chart
         this.renderChart(canvas, labels, expectedData, actualData, monthKeys);
     },
 
