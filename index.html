@@ -5,26 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FinanceFlow | Personal Financial Management</title>
     
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    
+    <!-- External Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
+    <!-- Styles -->
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body class="antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-white bg-zinc-950 text-zinc-50">
 
-    <!-- SYNC INDICATOR -->
+    <!-- ===================================
+         TOAST NOTIFICATION CONTAINER
+         =================================== -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- ===================================
+         SYNC INDICATOR
+         =================================== -->
     <div id="sync-indicator" class="sync-indicator">
         <iconify-icon icon="solar:refresh-linear" class="animate-spin"></iconify-icon>
         <span>Syncing data...</span>
     </div>
 
-    <!-- LOGIN MODAL -->
+    <!-- ===================================
+         LOGIN MODAL
+         =================================== -->
     <div id="login-modal" class="login-modal">
         <div class="login-card">
             <div class="text-center mb-8">
@@ -68,7 +81,9 @@
         </div>
     </div>
 
-    <!-- SIGNUP MODAL -->
+    <!-- ===================================
+         SIGNUP MODAL
+         =================================== -->
     <div id="signup-modal" class="login-modal">
         <div class="login-card">
             <div class="text-center mb-8">
@@ -116,16 +131,21 @@
         </div>
     </div>
 
-    <!-- SETTINGS MODAL -->
+    <!-- ===================================
+         SETTINGS MODAL
+         =================================== -->
     <div id="settings-modal" class="settings-modal">
         <div class="settings-content relative w-full max-w-sm mx-auto h-[840px] bg-[#080908] rounded-[3rem] border border-white/10 shadow-2xl overflow-hidden flex flex-col">
             <div class="h-14 w-full flex justify-between items-center px-6 pt-4 z-20">
-                <button id="close-settings-btn" class="text-white/60 hover:text-white transition-colors"><iconify-icon icon="solar:arrow-left-linear" class="text-2xl"></iconify-icon></button>
+                <button id="close-settings-btn" class="text-white/60 hover:text-white transition-colors">
+                    <iconify-icon icon="solar:arrow-left-linear" class="text-2xl"></iconify-icon>
+                </button>
                 <span class="text-base font-semibold text-white">Settings</span>
                 <div class="w-6"></div>
             </div>
 
             <div class="flex-1 overflow-y-auto no-scrollbar px-5 pb-8 pt-2">
+                <!-- User Profile Card -->
                 <div class="bg-white/5 rounded-3xl p-4 flex items-center gap-4 mb-8 border border-white/5">
                     <div class="relative">
                         <div class="w-16 h-16 rounded-full overflow-hidden border-2 border-emerald-500/20">
@@ -144,6 +164,7 @@
                     </button>
                 </div>
 
+                <!-- General Settings -->
                 <div class="mb-6">
                     <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3 px-2">General</h4>
                     <div class="bg-white/5 rounded-2xl overflow-hidden border border-white/5 divide-y divide-white/5">
@@ -177,6 +198,7 @@
                     </div>
                 </div>
 
+                <!-- Notifications -->
                 <div class="mb-6">
                     <h4 class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-3 px-2">Notifications</h4>
                     <div class="bg-white/5 rounded-2xl overflow-hidden border border-white/5 divide-y divide-white/5">
@@ -187,8 +209,8 @@
                                 </div>
                                 <span class="text-sm font-medium text-slate-200">Budget Alerts</span>
                             </div>
-                            <button class="w-11 h-6 bg-emerald-500 rounded-full relative transition-colors focus:outline-none cursor-pointer toggle-switch" data-enabled="true">
-                                <div class="toggle-thumb absolute right-1 top-1 bottom-1 w-4 h-4 bg-white rounded-full shadow"></div>
+                            <button class="w-11 h-6 rounded-full relative transition-colors focus:outline-none cursor-pointer toggle-switch bg-emerald-500" data-setting="budgetAlerts" data-enabled="true">
+                                <div class="toggle-thumb absolute left-1 top-1 bottom-1 w-4 h-4 bg-white rounded-full shadow transition-transform translate-x-5"></div>
                             </button>
                         </div>
                         <div class="w-full flex items-center justify-between p-4">
@@ -198,13 +220,14 @@
                                 </div>
                                 <span class="text-sm font-medium text-slate-200">Expense Reminders</span>
                             </div>
-                            <button class="w-11 h-6 bg-slate-700/50 rounded-full relative transition-colors focus:outline-none cursor-pointer hover:bg-slate-700 toggle-switch" data-enabled="false">
-                                <div class="toggle-thumb absolute left-1 top-1 bottom-1 w-4 h-4 bg-white rounded-full shadow"></div>
+                            <button class="w-11 h-6 rounded-full relative transition-colors focus:outline-none cursor-pointer toggle-switch bg-slate-700/50" data-setting="expenseReminders" data-enabled="false">
+                                <div class="toggle-thumb absolute left-1 top-1 bottom-1 w-4 h-4 bg-white rounded-full shadow transition-transform translate-x-0"></div>
                             </button>
                         </div>
                     </div>
                 </div>
 
+                <!-- Privacy & Security -->
                 <div class="mb-6">
                     <h4 class="text-[10px] font-semibold text-emerald-500 uppercase tracking-widest mb-3 px-2">Privacy & Security</h4>
                     <div class="bg-white/5 rounded-2xl overflow-hidden border border-white/5 divide-y divide-white/5">
@@ -229,6 +252,7 @@
                     </div>
                 </div>
 
+                <!-- Support -->
                 <div class="mb-8">
                     <h4 class="text-[10px] font-semibold text-emerald-500 uppercase tracking-widest mb-3 px-2">Support</h4>
                     <div class="bg-white/5 rounded-2xl overflow-hidden border border-white/5">
@@ -250,18 +274,22 @@
         </div>
     </div>
 
-    <!-- HERO SECTION -->
+    <!-- ===================================
+         HERO SECTION
+         =================================== -->
     <section class="relative w-full h-screen flex flex-col justify-between p-6 md:p-12 overflow-hidden border-b border-zinc-900">
         <div class="absolute inset-0 pointer-events-none grid-overlay z-0"></div>
         <div id="canvas-container" class="absolute inset-0 z-[1] pointer-events-none"></div>
         <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 blur-[120px] rounded-full z-0 pointer-events-none"></div>
 
+        <!-- Header -->
         <header class="relative z-20 flex justify-end items-start animate-fade-in pointer-events-auto" style="animation-delay: 0.1s;">
             <nav class="hidden md:flex items-center gap-8">
                 <a href="#" class="font-mono text-xs text-zinc-400 hover:text-white transition-colors uppercase tracking-widest">Features</a>
                 
                 <button id="show-login-btn-nav" class="font-mono text-xs text-emerald-400 hover:text-emerald-300 transition-colors uppercase tracking-widest border border-emerald-500/30 px-4 py-2 rounded-full" style="display: none;">Login</button>
 
+                <!-- Currency Selector -->
                 <div class="relative group pointer-events-auto z-50">
                     <button id="current-currency-label" class="font-mono text-xs text-zinc-400 hover:text-white transition-colors uppercase tracking-widest flex items-center gap-1">
                         USD <iconify-icon icon="solar:alt-arrow-down-linear" class="text-[10px]"></iconify-icon>
@@ -274,6 +302,7 @@
                     </div>
                 </div>
 
+                <!-- Account Switcher -->
                 <div id="account-switcher-wrapper" class="relative group pointer-events-auto z-50" style="display: none;">
                     <button id="account-switcher-btn" class="flex items-center gap-2 px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 rounded-full transition-all">
                         <img id="current-user-avatar" class="w-7 h-7 rounded-full border-2 border-emerald-500/30" src="https://ui-avatars.com/api/?name=Guest&background=10b981&color=fff" alt="User">
@@ -322,6 +351,7 @@
             </nav>
         </header>
 
+        <!-- Hero Content -->
         <div class="relative z-20 w-full max-w-4xl mt-auto md:mt-0 md:top-[-10%] animate-fade-in opacity-0" style="animation-delay: 0.3s;">
             <div class="flex items-center gap-3 mb-6">
                 <div class="h-px w-8 bg-emerald-500"></div>
@@ -339,7 +369,9 @@
             </div>
         </div>
 
+        <!-- Budget Flow Visualization (Desktop) -->
         <div class="absolute bottom-8 right-6 md:right-12 hidden lg:flex items-center animate-fade-in opacity-0" style="animation-delay: 0.5s; z-index: 50;">
+            <!-- Income Box -->
             <div class="w-56 tech-glass rounded-lg p-4 relative z-10 flex flex-col gap-3 mr-[-4px]">
                 <div class="flex items-center gap-2 mb-1">
                     <iconify-icon icon="solar:wallet-linear" style="stroke-width: 1.5;" class="text-zinc-400"></iconify-icon>
@@ -348,23 +380,26 @@
                 <div class="space-y-2">
                     <div class="flex justify-between text-xs font-mono text-zinc-500 items-center">
                         <span>Income</span>
-                        <input type="text" id="income-input" class="editable-value" data-value="5200" value="5,200">
+                        <input type="text" id="income-input" class="editable-value" data-value="0" value="0">
                     </div>
                 </div>
                 <div class="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-zinc-950 border border-zinc-700 rounded-full z-20"></div>
             </div>
 
+            <!-- Connector Line -->
             <svg class="w-12 h-2 overflow-visible relative z-0 pointer-events-none">
                 <path d="M0,4 C24,4 24,4 48,4" stroke="#10b981" stroke-width="1.5" fill="none" stroke-dasharray="3 3" class="animate-flow"></path>
             </svg>
 
+            <!-- Budget Allocation Box -->
             <div class="w-[320px] tech-glass rounded-lg ml-[-4px] relative z-10">
                 <div class="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-zinc-950 border border-zinc-700 rounded-full z-20"></div>
                 <div class="border-b border-zinc-800/60 px-4 py-3 flex justify-between items-center">
                     <span class="font-mono text-xs text-white uppercase tracking-widest">Budget Allocation</span>
-                    <iconify-icon icon="solar:settings-linear" style="stroke-width: 1.5;" class="text-zinc-500"></iconify-icon>
+                    <input type="month" id="budget-month-picker" class="bg-zinc-900 border border-zinc-700 text-zinc-300 text-[10px] font-mono uppercase tracking-widest px-2 py-1 rounded cursor-pointer hover:bg-zinc-800 transition-colors focus:outline-none focus:border-emerald-500/50" style="color-scheme: dark;">
                 </div>
                 <div class="p-5 space-y-6">
+                    <!-- Needs -->
                     <div class="space-y-2">
                         <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
                             <span>Needs</span>
@@ -375,6 +410,7 @@
                         </div>
                         <input type="range" id="input-needs" min="0" max="100" step="5" value="50">
                     </div>
+                    <!-- Wants -->
                     <div class="space-y-2">
                         <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
                             <span>Wants</span>
@@ -385,6 +421,7 @@
                         </div>
                         <input type="range" id="input-wants" min="0" max="100" step="5" value="30">
                     </div>
+                    <!-- Savings -->
                     <div class="space-y-2">
                         <div class="flex justify-between items-center text-xs font-mono tracking-widest text-zinc-500 uppercase">
                             <span>Savings</span>
@@ -395,6 +432,7 @@
                         </div>
                         <input type="range" id="input-savings" min="0" max="100" step="5" value="20">
                     </div>
+                    <!-- Total -->
                     <div class="pt-4 border-t border-zinc-800/60">
                         <div class="flex justify-between text-xs font-mono tracking-widest">
                             <span class="text-zinc-500 uppercase">Total</span>
@@ -405,6 +443,7 @@
             </div>
         </div>
 
+        <!-- Daily Expense Form -->
         <div class="absolute bottom-6 left-6 md:left-12 right-6 md:right-auto w-full max-w-2xl tech-glass rounded-lg p-4 pointer-events-auto animate-fade-in opacity-0" style="animation-delay: 0.5s; z-index: 50;">
             <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
@@ -428,15 +467,7 @@
                 <div>
                     <label for="expense-category" class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block mb-1">Category</label>
                     <select id="expense-category" class="form-select text-xs py-2 w-full" required>
-                        <option value="">Select</option>
-                        <option value="housing">Housing</option>
-                        <option value="food">Food & Dining</option>
-                        <option value="transportation">Transportation</option>
-                        <option value="entertainment">Entertainment</option>
-                        <option value="healthcare">Healthcare</option>
-                        <option value="shopping">Shopping</option>
-                        <option value="utilities">Utilities</option>
-                        <option value="other">Other</option>
+                        <option value="" disabled selected>Select</option>
                     </select>
                 </div>
                 <div>
@@ -447,7 +478,9 @@
         </div>
     </section>
 
-    <!-- CONTENT SECTIONS -->
+    <!-- ===================================
+         FEATURES SECTION
+         =================================== -->
     <section class="py-24 px-6 md:px-12 max-w-7xl mx-auto relative z-20">
         <div class="mb-16">
             <h2 class="text-3xl md:text-4xl tracking-tight font-normal text-white mb-4">Smart Money Management</h2>
@@ -455,6 +488,7 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             
+            <!-- Budget Planning Card -->
             <div id="budget-planning-trigger" class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group cursor-pointer">
                 <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center mb-6 text-emerald-500 group-hover:scale-110 transition-transform">
                     <iconify-icon icon="solar:chart-square-linear" style="stroke-width: 1.5;" class="text-xl"></iconify-icon>
@@ -463,6 +497,7 @@
                 <p class="text-base text-zinc-400 font-light leading-relaxed">Create custom budgets for every category. Set spending limits and get alerts when you're approaching them.</p>
             </div>
             
+            <!-- Expense Tracking Card -->
             <div class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group cursor-pointer" id="expense-tracking-card">
                 <div class="flex justify-between items-start mb-6">
                     <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
@@ -474,6 +509,7 @@
                 <p class="text-base text-zinc-400 font-light leading-relaxed">Automatically categorize transactions. See exactly where your money goes with visual reports and insights.</p>
             </div>
             
+            <!-- Savings Goals Card -->
             <div class="p-6 rounded-xl bg-zinc-900/40 border border-zinc-800/50 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all duration-300 group">
                 <div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center mb-6 text-emerald-500 group-hover:scale-110 transition-transform">
                     <iconify-icon icon="solar:wallet-money-linear" style="stroke-width: 1.5;" class="text-xl"></iconify-icon>
@@ -484,7 +520,9 @@
         </div>
     </section>
 
-    <!-- MONTHLY EXPENSE BREAKDOWN SECTION -->
+    <!-- ===================================
+         MONTHLY EXPENSE BREAKDOWN
+         =================================== -->
     <section class="py-24 border-y border-zinc-900 bg-zinc-950/50 relative z-20">
         <div class="px-6 md:px-12 max-w-7xl mx-auto">
             <div class="mb-12">
@@ -601,7 +639,9 @@
         </div>
     </section>
 
-    <!-- FOOTER -->
+    <!-- ===================================
+         FOOTER
+         =================================== -->
     <footer class="bg-[#09090b] pt-20 pb-10 px-6 md:px-12 relative z-20 border-t border-zinc-900">
         <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 lg:gap-8 mb-16">
             <div class="lg:col-span-2 flex flex-col items-start">
@@ -642,7 +682,9 @@
         </div>
     </footer>
 
-    <!-- EXPENSE TRACKING MODAL -->
+    <!-- ===================================
+         EXPENSE TRACKING MODAL
+         =================================== -->
     <div class="expense-modal" id="expense-modal">
         <button class="close-modal" id="close-expense-modal" title="Press ESC to close">
             <iconify-icon icon="solar:close-circle-linear" style="stroke-width: 1.5;" class="text-white text-xl"></iconify-icon>
@@ -687,35 +729,68 @@
                 </div>
 
                 <!-- CARD 2: Financial Overview -->
-                <div class="expense-card expense-card-tall">
+                <div class="expense-card expense-card-tall flex flex-col">
                     <div class="pb-6 border-b border-zinc-800/60 mb-6">
                         <div class="stat-label" id="total-spend-label">Total Monthly Spend</div>
-                        <div class="stat-number" id="total-monthly-spend">$0</div>
+                        <div class="stat-number mb-4" id="total-monthly-spend">$0</div>
+                        
+                        <!-- Total Spend Progress Bar -->
+                        <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full transition-all duration-500" id="spend-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between items-center mt-2">
+                            <span class="text-[10px] text-zinc-500 font-mono" id="spend-progress-text">0% of Income</span>
+                        </div>
                     </div>
+                    
+                    <!-- Budget Breakdown (NEW) -->
                     <div class="pb-6 border-b border-zinc-800/60 mb-6">
-                        <div class="stat-label mb-4">Income vs. Expense</div>
-                        <div class="comparison-bar">
-                            <div class="bar-item">
-                                <div class="text-xs text-zinc-400 mb-1">Income</div>
-                                <div class="bar-fill">
-                                    <div class="bar-fill-inner bg-emerald-500" id="income-bar" style="width: 0%"></div>
+                        <div class="text-xs font-mono text-zinc-400 uppercase tracking-widest mb-4">Budget Breakdown</div>
+                        
+                        <!-- Needs Bar -->
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                    <span class="text-xs text-zinc-400 font-mono uppercase tracking-widest">Needs</span>
                                 </div>
-                                <div class="text-xs text-white mt-1 font-mono" id="income-amount">$0</div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm text-emerald-400 font-mono font-medium" id="needs-spent-amount">$0</span>
+                                    <span class="text-xs text-zinc-600">/</span>
+                                    <span class="text-xs text-zinc-500 font-mono" id="needs-budget-limit">$0</span>
+                                </div>
                             </div>
-                            <div class="bar-item">
-                                <div class="text-xs text-zinc-400 mb-1">Expense</div>
-                                <div class="bar-fill">
-                                    <div class="bar-fill-inner bg-red-500" id="expense-bar" style="width: 0%"></div>
+                            <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden" id="needs-progress-bar">
+                                <div class="h-full rounded-full transition-all duration-500 bg-emerald-500" id="needs-progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Wants Bar -->
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span class="text-xs text-zinc-400 font-mono uppercase tracking-widest">Wants</span>
                                 </div>
-                                <div class="text-xs text-white mt-1 font-mono" id="expense-amount">$0</div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm text-blue-400 font-mono font-medium" id="wants-spent-amount">$0</span>
+                                    <span class="text-xs text-zinc-600">/</span>
+                                    <span class="text-xs text-zinc-500 font-mono" id="wants-budget-limit">$0</span>
+                                </div>
+                            </div>
+                            <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden" id="wants-progress-bar">
+                                <div class="h-full rounded-full transition-all duration-500 bg-blue-500" id="wants-progress-fill" style="width: 0%"></div>
                             </div>
                         </div>
                     </div>
-                    <div>
+                    
+                    <!-- Safe-to-Spend Section -->
+                    <div class="flex-1 flex flex-col">
                         <div class="stat-label">Safe-to-Spend</div>
                         <div class="text-2xl font-normal text-white font-mono" id="safe-to-spend">$0</div>
                         <div class="text-xs text-zinc-500 mt-2">After bills & savings</div>
-                        <div class="daily-allowance-card">
+                        
+                        <div class="daily-allowance-card mt-auto">
                             <div class="daily-allowance-label">Daily Allowance</div>
                             <div class="daily-allowance-amount" id="daily-allowance">$0</div>
                             <div class="daily-allowance-days" id="days-remaining">0 days left this month</div>
@@ -736,14 +811,6 @@
                         </div>
                         <select id="category-filter" class="category-filter-select">
                             <option value="all">All Categories</option>
-                            <option value="housing">Housing</option>
-                            <option value="food">Food & Dining</option>
-                            <option value="transportation">Transportation</option>
-                            <option value="entertainment">Entertainment</option>
-                            <option value="healthcare">Healthcare</option>
-                            <option value="shopping">Shopping</option>
-                            <option value="utilities">Utilities</option>
-                            <option value="other">Other</option>
                         </select>
                     </div>
                     <div class="expense-history" id="expense-history-list">
@@ -754,7 +821,9 @@
         </div>
     </div>
 
-    <!-- BUDGET PLANNING MODAL -->
+    <!-- ===================================
+         BUDGET PLANNING MODAL
+         =================================== -->
     <div class="expense-modal" id="budget-modal">
         <button class="close-modal" id="close-budget-modal" title="Press ESC to close">
             <iconify-icon icon="solar:close-circle-linear" style="stroke-width: 1.5;" class="text-white text-xl"></iconify-icon>
@@ -862,9 +931,9 @@
                                 </div>
                                 
                                 <div class="flex items-end gap-2">
-                                    <button id="add-sim-btn" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 py-2.5 rounded-md transition-colors h-[42px]">Add</button>
-                                    <button id="edit-sim-btn" class="hidden w-full md:w-auto bg-blue-500 hover:bg-blue-400 text-white text-xs px-6 py-2.5 rounded-md transition-all h-[42px] shadow-[0_0_15px_rgba(59,130,246,0.5)]">Save</button>
-                                    <button id="cancel-sim-btn" class="hidden text-zinc-400 hover:text-white text-xs px-3 py-2.5 transition-colors h-[42px]">Cancel</button>
+                                    <button type="button" id="add-sim-btn" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-6 py-2.5 rounded-md transition-colors h-[42px]">Add</button>
+                                    <button type="button" id="edit-sim-btn" class="hidden w-full md:w-auto bg-blue-500 hover:bg-blue-400 text-white text-xs px-6 py-2.5 rounded-md transition-all h-[42px] shadow-[0_0_15px_rgba(59,130,246,0.5)]">Save</button>
+                                    <button type="button" id="cancel-sim-btn" class="hidden text-zinc-400 hover:text-white text-xs px-3 py-2.5 transition-colors h-[42px]">Cancel</button>
                                 </div>
                             </div>
                             <div class="text-[10px] text-zinc-600 mt-4">Click on any point on the chart above to quickly edit its value.</div>
@@ -875,7 +944,9 @@
         </div>
     </div>
 
-    <!-- Chart.js Initialization Script -->
+    <!-- ===================================
+         CHART.JS INITIALIZATION
+         =================================== -->
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const ctx = document.getElementById('monthly-stacked-chart');
@@ -901,7 +972,7 @@
                 datasets: [
                     {
                         label: 'Monthly Income',
-                        data: Array(12).fill(null), // ✅ Start with nulls
+                        data: Array(12).fill(null),
                         type: 'line',
                         borderColor: '#10b981',
                         backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -916,7 +987,7 @@
                         pointHoverBorderWidth: 3,
                         tension: 0.4,
                         fill: true,
-                        spanGaps: false, // ✅ Don't connect gaps (null values create breaks)
+                        spanGaps: true,
                         order: 1,
                         yAxisID: 'y'
                     },
@@ -1113,7 +1184,9 @@
     });
     </script>
 
-    <!-- APPLICATION LOGIC -->
+    <!-- ===================================
+         APPLICATION LOGIC
+         =================================== -->
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
